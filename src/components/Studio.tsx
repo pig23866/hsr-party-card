@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Sparkles, Plus, Check, AlertCircle, X, Search, Edit2, Save, Upload, ClipboardPaste } from 'lucide-react';
+import { ArrowLeft, Sparkles, Plus, Check, AlertCircle, X, Search, Edit2, Save, Download, Upload, ClipboardPaste, FileCode, FileText } from 'lucide-react';
 import { Question } from '../data/packs';
-import { Deck } from '../hooks/useDeck';
+import { Deck, DeckMetadata } from '../hooks/useDeck';
 import { GoogleGenAI, Type } from '@google/genai';
 
 interface StudioProps {
   deck: Deck;
+  activeDeck: DeckMetadata;
   aiAnswers: string[];
   aiQuestions: Question[];
   onBack: () => void;
@@ -19,12 +20,10 @@ interface StudioProps {
   bulkImport: (data: any) => { addedAnswers: number, addedQuestions: number, duplicateAnswers: number, duplicateQuestions: number };
 }
 
-export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport }: StudioProps) {
+export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport }: StudioProps) {
   const [tab, setTab] = useState<'answer' | 'question'>('answer');
   const [answerInput, setAnswerInput] = useState('');
-  const [qSegA, setQSegA] = useState('');
-  const [qSegB, setQSegB] = useState('');
-  const [qSegC, setQSegC] = useState('');
+  const [smartQuestionInput, setSmartQuestionInput] = useState('');
   
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info', msg: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -35,12 +34,13 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
   const [editAnswerInput, setEditAnswerInput] = useState('');
 
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
-  const [editQSegA, setEditQSegA] = useState('');
-  const [editQSegB, setEditQSegB] = useState('');
-  const [editQSegC, setEditQSegC] = useState('');
+  const [editSmartInput, setEditSmartInput] = useState('');
+
+  const [aiCount, setAiCount] = useState(5);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
+  const [exportConfirmConfig, setExportConfirmConfig] = useState<{type: 'txt' | 'html', numFiles: number, message: string} | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,6 +83,135 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
     }
   };
 
+  const triggerExportTxt = () => {
+    const maxAnswers = 200;
+    const maxQuestions = 100;
+    
+    const totalAnswers = deck.answers.length;
+    const totalQuestions = deck.questions.length;
+    
+    const numFiles = Math.max(
+      Math.ceil(totalAnswers / maxAnswers),
+      Math.ceil(totalQuestions / maxQuestions),
+      1
+    );
+
+    setExportConfirmConfig({
+      type: 'txt',
+      numFiles,
+      message: numFiles > 1 
+        ? `卡牌數量較多，將為您匯出 ${numFiles} 個 TXT 檔案！`
+        : `將為您匯出 1 個 TXT 檔案！`
+    });
+  };
+
+  const executeExportTxt = (numFiles: number) => {
+    const maxAnswers = 200;
+    const maxQuestions = 100;
+
+    for (let i = 0; i < numFiles; i++) {
+      const chunkAnswers = deck.answers.slice(i * maxAnswers, (i + 1) * maxAnswers);
+      const chunkQuestions = deck.questions.slice(i * maxQuestions, (i + 1) * maxQuestions);
+      
+      const partNum = String(i + 1).padStart(2, '0');
+      const labelName = numFiles > 1 ? `${activeDeck.name}_${partNum}` : activeDeck.name;
+
+      const exportData = {
+        mode: "general",
+        label: labelName,
+        createdAt: Math.floor(Date.now() / 1000),
+        answers: chunkAnswers,
+        questions: chunkQuestions
+      };
+
+      const jsonString = JSON.stringify(exportData);
+      const blob = new Blob([jsonString], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = numFiles > 1 ? `${activeDeck.name}-export-part${partNum}.txt` : `${activeDeck.name}-export.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    showStatus('success', `成功匯出 ${numFiles} 個 TXT 檔案！`);
+    setExportConfirmConfig(null);
+  };
+
+  const triggerExportHtml = () => {
+    setExportConfirmConfig({
+      type: 'html',
+      numFiles: 1,
+      message: `將為您匯出 1 個 HTML 檔案！`
+    });
+  };
+
+  const executeExportHtml = () => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${activeDeck.name} - 卡牌庫</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f7; color: #333; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    h1 { color: #28a89b; text-align: center; margin-bottom: 40px; }
+    .section { margin-bottom: 40px; }
+    .section-title { border-bottom: 2px solid #28a89b; padding-bottom: 10px; margin-bottom: 20px; color: #476a6f; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; }
+    .card { background: white; border: 2px solid #d1dfdf; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; font-weight: bold; position: relative; }
+    .card.ai { border-color: #fde047; background: linear-gradient(135deg, #fff, #fef9c3); }
+    .answer-card { background-color: #28a89b; color: white; border-color: #1e8278; }
+    .answer-card.ai { background: linear-gradient(135deg, #28a89b, #1e8278); border-color: #fde047; }
+    .ai-badge { display: inline-block; font-size: 0.8em; background: #fde047; color: #854d0e; padding: 2px 8px; border-radius: 10px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>${activeDeck.name} - 填空派對卡牌庫</h1>
+  
+  <div class="section">
+    <h2 class="section-title">題目卡 (${deck.questions.length} 張)</h2>
+    <div class="grid">
+      ${deck.questions.map(q => {
+        const isAi = aiQuestions.some(aq => aq.segmentA === q.segmentA && aq.segmentB === q.segmentB && aq.segmentC === q.segmentC);
+        return `
+        <div class="card ${isAi ? 'ai' : ''}">
+          ${isAi ? '<div class="ai-badge">✨ AI 生成</div>' : ''}
+          <div>${q.segmentA} _____ ${q.segmentB} ${q.segmentC ? '_____ ' + q.segmentC : ''}</div>
+        </div>
+        `;
+      }).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">答案卡 (${deck.answers.length} 張)</h2>
+    <div class="grid">
+      ${deck.answers.map(ans => {
+        const isAi = aiAnswers.some(a => a === ans);
+        return `
+        <div class="card answer-card ${isAi ? 'ai' : ''}">
+          ${isAi ? '✨ ' : ''}${ans}
+        </div>
+        `;
+      }).join('')}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeDeck.name}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('success', '卡牌庫已匯出為 HTML！');
+    setExportConfirmConfig(null);
+  };
+
   const handleAddAnswer = () => {
     if (!answerInput.trim()) return;
     const success = addAnswer(answerInput.trim());
@@ -94,17 +223,27 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
     }
   };
 
+  const parseQuestion = (text: string): Question | null => {
+    const parts = text.split(/(?:OO|〇〇|\{\}|\[\]|_{2,})/i);
+    if (parts.length === 2) {
+      return { segmentA: parts[0].trim(), segmentB: parts[1].trim(), segmentC: '' };
+    } else if (parts.length === 3) {
+      return { segmentA: parts[0].trim(), segmentB: parts[1].trim(), segmentC: parts[2].trim() };
+    }
+    return null;
+  };
+
   const handleAddQuestion = () => {
-    if (!qSegA.trim() && !qSegB.trim()) return;
-    const q: Question = {
-      segmentA: qSegA.trim(),
-      segmentB: qSegB.trim(),
-      segmentC: qSegC.trim()
-    };
-    const success = addQuestion(q);
+    if (!smartQuestionInput.trim()) return;
+    const parsed = parseQuestion(smartQuestionInput);
+    if (!parsed) {
+      showStatus('error', '題目格式錯誤！請包含 1~2 個空格標記 (例如：OO, {}, [])');
+      return;
+    }
+    const success = addQuestion(parsed);
     if (success) {
       showStatus('success', '題目卡新增成功！');
-      setQSegA(''); setQSegB(''); setQSegC('');
+      setSmartQuestionInput('');
     } else {
       showStatus('error', '此題目卡已存在！');
     }
@@ -119,7 +258,7 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
       if (tab === 'answer') {
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
-          contents: "你是一個《崩壞：星穹鐵道》的資深玩家與迷因大師。請為一個填空派對遊戲生成 5 個好笑、有梗的「答案卡」。答案可以是角色名稱、招式、遊戲迷因、社群梗等。請以 JSON 陣列格式回傳字串。",
+          contents: `你是一個《崩壞：星穹鐵道》的資深玩家與迷因大師。請為一個填空派對遊戲生成 ${aiCount} 個好笑、有梗的「答案卡」。答案可以是角色名稱、招式、遊戲迷因、社群梗等。請以 JSON 陣列格式回傳字串。`,
           config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -137,7 +276,7 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
       } else {
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
-          contents: "你是一個《崩壞：星穹鐵道》的資深玩家與迷因大師。請為一個填空派對遊戲生成 3 個好笑、有梗的「題目卡」。題目卡會有 1 到 2 個空格。請將句子拆分成 segmentA, segmentB, segmentC。例如：「幫幫我，[空格]先生！」 -> segmentA: '幫幫我，', segmentB: '先生！', segmentC: ''。如果有兩個空格：「[空格]，便是[空格]。」 -> segmentA: '', segmentB: '，便是', segmentC: '。'。請以 JSON 陣列格式回傳。",
+          contents: `你是一個《崩壞：星穹鐵道》的資深玩家與迷因大師。請為一個填空派對遊戲生成 ${aiCount} 個好笑、有梗的「題目卡」。題目卡會有 1 到 2 個空格。請將句子拆分成 segmentA, segmentB, segmentC。例如：「幫幫我，[空格]先生！」 -> segmentA: '幫幫我，', segmentB: '先生！', segmentC: ''。如果有兩個空格：「[空格]，便是[空格]。」 -> segmentA: '', segmentB: '，便是', segmentC: '。'。請以 JSON 陣列格式回傳。`,
           config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -185,19 +324,17 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
 
   const startEditQuestion = (q: Question) => {
     setEditingQuestion(q);
-    setEditQSegA(q.segmentA);
-    setEditQSegB(q.segmentB);
-    setEditQSegC(q.segmentC);
+    setEditSmartInput(`${q.segmentA}OO${q.segmentB}${q.segmentC ? 'OO' + q.segmentC : ''}`);
   };
 
   const saveEditQuestion = (oldQ: Question) => {
-    if (!editQSegA.trim() && !editQSegB.trim()) return;
-    const newQ: Question = {
-      segmentA: editQSegA.trim(),
-      segmentB: editQSegB.trim(),
-      segmentC: editQSegC.trim()
-    };
-    const success = editQuestion(oldQ, newQ);
+    if (!editSmartInput.trim()) return;
+    const parsed = parseQuestion(editSmartInput);
+    if (!parsed) {
+      showStatus('error', '題目格式錯誤！請包含 1~2 個空格標記 (例如：OO, {}, [])');
+      return;
+    }
+    const success = editQuestion(oldQ, parsed);
     if (success) {
       showStatus('success', '題目卡修改成功！');
       setEditingQuestion(null);
@@ -219,18 +356,35 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
         </button>
         <div className="font-bold text-lg tracking-wider flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-yellow-300" />
-          卡牌工作室
+          {activeDeck.name}
         </div>
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => setShowImportModal(true)}
+            onClick={triggerExportHtml}
             className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
-            title="貼上 JSON 文字"
+            title="匯出為 HTML"
           >
-            <ClipboardPaste className="w-5 h-5" />
-            <span className="hidden sm:inline">貼上</span>
+            <FileCode className="w-5 h-5" />
+            <span className="hidden sm:inline">匯出 HTML</span>
           </button>
           <div className="w-px h-4 bg-white/30 hidden sm:block"></div>
+          <button 
+            onClick={triggerExportTxt}
+            className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
+            title="匯出為 TXT"
+          >
+            <Download className="w-5 h-5" />
+            <span className="hidden sm:inline">匯出 TXT</span>
+          </button>
+          <div className="w-px h-4 bg-white/30 hidden sm:block"></div>
+          <button 
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
+            title="匯入卡牌"
+          >
+            <Upload className="w-5 h-5" />
+            <span className="hidden sm:inline">匯入卡牌</span>
+          </button>
           <input 
             type="file" 
             accept=".json,.txt" 
@@ -238,14 +392,6 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
             onChange={handleImport} 
             className="hidden" 
           />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
-            title="上傳 JSON 檔案"
-          >
-            <Upload className="w-5 h-5" />
-            <span className="hidden sm:inline">檔案</span>
-          </button>
         </div>
       </header>
 
@@ -292,31 +438,36 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <input
-                type="text"
-                value={qSegA}
-                onChange={(e) => setQSegA(e.target.value)}
-                placeholder="第一段內容"
-                className="bg-white border-2 border-[#d1dfdf] rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-[#28a89b] transition-colors font-medium"
+              <textarea
+                value={smartQuestionInput}
+                onChange={(e) => setSmartQuestionInput(e.target.value)}
+                placeholder="輸入題目，使用 OO 或 {} 代表空格。例如：開拓者的每日任務竟然是 {} 和 {}。"
+                className="bg-white border-2 border-[#d1dfdf] rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-[#28a89b] transition-colors font-medium h-24 resize-none"
               />
-              <input
-                type="text"
-                value={qSegB}
-                onChange={(e) => setQSegB(e.target.value)}
-                placeholder="第二段內容"
-                className="bg-white border-2 border-[#d1dfdf] rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-[#28a89b] transition-colors font-medium"
-              />
-              <input
-                type="text"
-                value={qSegC}
-                onChange={(e) => setQSegC(e.target.value)}
-                placeholder="第三段內容 (可不填)"
-                className="bg-white border-2 border-[#d1dfdf] rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-[#28a89b] transition-colors font-medium"
-              />
+              {smartQuestionInput.trim() && (
+                <div className="text-sm text-gray-500 bg-white/50 p-3 rounded-xl border border-[#d1dfdf]">
+                  <div className="font-bold mb-1 text-[#476a6f]">預覽：</div>
+                  {parseQuestion(smartQuestionInput) ? (
+                    <div className="flex flex-wrap items-center gap-1 text-gray-800 font-bold">
+                      {parseQuestion(smartQuestionInput)?.segmentA}
+                      <span className="inline-block w-8 border-b-2 border-gray-400 mx-1"></span>
+                      {parseQuestion(smartQuestionInput)?.segmentB}
+                      {parseQuestion(smartQuestionInput)?.segmentC && (
+                        <>
+                          <span className="inline-block w-8 border-b-2 border-gray-400 mx-1"></span>
+                          {parseQuestion(smartQuestionInput)?.segmentC}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-red-500 font-bold">格式錯誤：請確保包含 1 到 2 個空格標記 (例如 OO 或 {})</div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={handleAddQuestion}
-                disabled={!qSegA.trim() && !qSegB.trim()}
-                className="mt-2 bg-[#28a89b] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-[#239287] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                disabled={!smartQuestionInput.trim() || !parseQuestion(smartQuestionInput)}
+                className="bg-[#28a89b] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-[#239287] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 加入卡池
               </button>
@@ -324,6 +475,17 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
           )}
 
           <div className="mt-4 pt-4 border-t-2 border-[#d1dfdf]">
+            <div className="flex gap-2 mb-3 items-center">
+              <label className="text-sm font-bold text-gray-600 whitespace-nowrap">生成數量：</label>
+              <input 
+                type="number" 
+                min="1" 
+                max="20" 
+                value={aiCount} 
+                onChange={(e) => setAiCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                className="w-20 bg-white border-2 border-[#d1dfdf] rounded-lg px-3 py-1.5 text-gray-800 focus:outline-none focus:border-[#28a89b] font-medium text-center"
+              />
+            </div>
             <button
               onClick={generateWithAI}
               disabled={isGenerating}
@@ -359,7 +521,7 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
                 return (
                 <div key={idx} className="relative">
                   {editingAnswer === ans ? (
-                    <div className="bg-white border-2 border-[#28a89b] rounded-full p-1 flex items-center shadow-md">
+                    <div className="bg-white border-2 border-[#28a89b] rounded-2xl p-1 flex items-center shadow-md">
                       <input 
                         type="text"
                         value={editAnswerInput}
@@ -372,8 +534,8 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
                     </div>
                   ) : (
                     <>
-                      <div className={`border-[3px] rounded-full py-3 px-4 text-center text-white font-bold shadow-md truncate text-sm md:text-base ${isAi ? 'bg-gradient-to-r from-[#28a89b] to-[#1e8278] border-yellow-300' : 'bg-[#28a89b] border-[#fde047]'}`}>
-                        {isAi && <Sparkles className="w-4 h-4 inline-block mr-1 text-yellow-300 -mt-1" />}
+                      <div className={`border-[3px] rounded-2xl py-3 px-4 text-center text-white font-bold shadow-md break-words text-sm md:text-base ${isAi ? 'bg-gradient-to-r from-[#28a89b] to-[#1e8278] border-yellow-300' : 'bg-[#28a89b] border-[#fde047]'}`}>
+                        {isAi && <Sparkles className="w-4 h-4 inline-block mr-1 text-yellow-300 -mt-1 shrink-0" />}
                         {ans}
                       </div>
                       <button 
@@ -409,12 +571,34 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
                 <div key={idx} className={`relative border-2 rounded-2xl p-5 shadow-md ${isAi ? 'bg-gradient-to-br from-[#f4f7f7] to-[#e6f0f0] border-yellow-400' : 'bg-[#f4f7f7] border-[#476a6f]'}`}>
                   {editingQuestion === q ? (
                     <div className="flex flex-col gap-3">
-                      <input type="text" value={editQSegA} onChange={(e) => setEditQSegA(e.target.value)} className="bg-white border-2 border-[#d1dfdf] rounded-xl px-3 py-2 text-gray-800 outline-none font-medium" placeholder="第一段內容" />
-                      <input type="text" value={editQSegB} onChange={(e) => setEditQSegB(e.target.value)} className="bg-white border-2 border-[#d1dfdf] rounded-xl px-3 py-2 text-gray-800 outline-none font-medium" placeholder="第二段內容" />
-                      <input type="text" value={editQSegC} onChange={(e) => setEditQSegC(e.target.value)} className="bg-white border-2 border-[#d1dfdf] rounded-xl px-3 py-2 text-gray-800 outline-none font-medium" placeholder="第三段內容 (可不填)" />
+                      <textarea 
+                        value={editSmartInput} 
+                        onChange={(e) => setEditSmartInput(e.target.value)} 
+                        className="bg-white border-2 border-[#d1dfdf] rounded-xl px-3 py-2 text-gray-800 outline-none font-medium h-24 resize-none" 
+                        placeholder="輸入題目，使用 OO 或 {} 代表空格" 
+                      />
+                      {editSmartInput.trim() && (
+                        <div className="text-sm text-gray-500 bg-white/50 p-2 rounded-xl border border-[#d1dfdf]">
+                          {parseQuestion(editSmartInput) ? (
+                            <div className="flex flex-wrap items-center gap-1 text-gray-800 font-bold text-xs">
+                              {parseQuestion(editSmartInput)?.segmentA}
+                              <span className="inline-block w-6 border-b-2 border-gray-400 mx-1"></span>
+                              {parseQuestion(editSmartInput)?.segmentB}
+                              {parseQuestion(editSmartInput)?.segmentC && (
+                                <>
+                                  <span className="inline-block w-6 border-b-2 border-gray-400 mx-1"></span>
+                                  {parseQuestion(editSmartInput)?.segmentC}
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-red-500 font-bold text-xs">格式錯誤：請確保包含 1 到 2 個空格標記</div>
+                          )}
+                        </div>
+                      )}
                       <div className="flex justify-end gap-2 mt-2">
                         <button onClick={() => setEditingQuestion(null)} className="px-4 py-2 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors">取消</button>
-                        <button onClick={() => saveEditQuestion(q)} className="px-4 py-2 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl flex items-center gap-2 transition-colors shadow-sm"><Save className="w-4 h-4" /> 儲存</button>
+                        <button onClick={() => saveEditQuestion(q)} disabled={!parseQuestion(editSmartInput)} className="px-4 py-2 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Save className="w-4 h-4" /> 儲存</button>
                       </div>
                     </div>
                   ) : (
@@ -482,19 +666,35 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
             >
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold text-[#476a6f] flex items-center gap-2">
-                  <ClipboardPaste className="w-6 h-6" />
-                  貼上 JSON 內容
+                  <Upload className="w-6 h-6" />
+                  匯入卡牌庫
                 </h3>
                 <button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600">
                   <X className="w-6 h-6" />
                 </button>
               </div>
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder="在此貼上您的 JSON 格式題庫..."
-                className="w-full h-48 bg-white border-2 border-[#d1dfdf] rounded-xl p-4 text-gray-800 focus:outline-none focus:border-[#28a89b] transition-colors font-mono text-sm resize-none"
-              />
+              
+              <div className="flex flex-col gap-4">
+                <div className="bg-white border-2 border-dashed border-[#28a89b] rounded-xl p-6 text-center hover:bg-[#f0f9f8] transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="w-8 h-8 text-[#28a89b] mx-auto mb-2" />
+                  <p className="font-bold text-[#476a6f]">點擊選擇 JSON 或 TXT 檔案</p>
+                  <p className="text-sm text-gray-500 mt-1">支援 .json 或 .txt 格式</p>
+                </div>
+                
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 h-px bg-gray-300"></div>
+                  <span className="text-sm font-bold text-gray-400">或貼上內容</span>
+                  <div className="flex-1 h-px bg-gray-300"></div>
+                </div>
+
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder="在此貼上您的 JSON 格式題庫..."
+                  className="w-full h-32 bg-white border-2 border-[#d1dfdf] rounded-xl p-4 text-gray-800 focus:outline-none focus:border-[#28a89b] transition-colors font-mono text-sm resize-none"
+                />
+              </div>
+
               <div className="flex justify-end gap-3 mt-2">
                 <button 
                   onClick={() => setShowImportModal(false)}
@@ -508,7 +708,46 @@ export function Studio({ deck, aiAnswers, aiQuestions, onBack, addAnswer, delete
                   className="px-6 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Check className="w-5 h-5" />
-                  確認匯入
+                  確認匯入文字
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Export Confirm Modal */}
+        {exportConfirmConfig && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#f4f7f7] border-4 border-[#28a89b] rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4 text-center"
+            >
+              <div className="mx-auto bg-[#28a89b]/10 p-4 rounded-full mb-2">
+                {exportConfirmConfig.type === 'txt' ? <Download className="w-10 h-10 text-[#28a89b]" /> : <FileCode className="w-10 h-10 text-[#28a89b]" />}
+              </div>
+              <h3 className="text-xl font-bold text-[#476a6f]">確認匯出</h3>
+              <p className="text-gray-600 font-medium mb-4">
+                {exportConfirmConfig.message}
+              </p>
+              <div className="flex justify-center gap-3">
+                <button 
+                  onClick={() => setExportConfirmConfig(null)}
+                  className="px-6 py-2.5 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors flex-1"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={() => {
+                    if (exportConfirmConfig.type === 'txt') {
+                      executeExportTxt(exportConfirmConfig.numFiles);
+                    } else {
+                      executeExportHtml();
+                    }
+                  }}
+                  className="px-6 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm flex-1"
+                >
+                  確認下載
                 </button>
               </div>
             </motion.div>
