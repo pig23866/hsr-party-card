@@ -19,6 +19,17 @@ export function useDeck() {
   const [aiAnswers, setAiAnswers] = useState<string[]>([]);
   const [aiQuestions, setAiQuestions] = useState<Question[]>([]);
 
+  const safeSetItem = useCallback((key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      console.error('Storage quota exceeded', e);
+      alert('儲存空間已滿！請刪除一些卡牌或匯出後再試。');
+      return false;
+    }
+  }, []);
+
   const getStorageKey = useCallback((key: string, deckId: string = activeDeckId) => {
     return `deck_${deckId}_${key}`;
   }, [activeDeckId]);
@@ -100,7 +111,7 @@ export function useDeck() {
     const id = `deck_${Date.now()}`;
     const newDeck: DeckMetadata = { id, name, createdAt: Date.now() };
     const newList = [...decks, newDeck];
-    localStorage.setItem('deck_list', JSON.stringify(newList));
+    safeSetItem('deck_list', JSON.stringify(newList));
     setDecks(newList);
     switchDeck(id);
     return id;
@@ -109,7 +120,7 @@ export function useDeck() {
   const deleteDeck = (id: string) => {
     if (id === 'default') return false; // Cannot delete default
     const newList = decks.filter(d => d.id !== id);
-    localStorage.setItem('deck_list', JSON.stringify(newList));
+    safeSetItem('deck_list', JSON.stringify(newList));
     setDecks(newList);
     
     // Clean up data
@@ -128,13 +139,13 @@ export function useDeck() {
 
   const renameDeck = (id: string, newName: string) => {
     const newList = decks.map(d => d.id === id ? { ...d, name: newName } : d);
-    localStorage.setItem('deck_list', JSON.stringify(newList));
+    safeSetItem('deck_list', JSON.stringify(newList));
     setDecks(newList);
     return true;
   };
 
   const switchDeck = (id: string) => {
-    localStorage.setItem('current_deck_id', id);
+    safeSetItem('current_deck_id', id);
     setActiveDeckId(id);
   };
 
@@ -142,16 +153,16 @@ export function useDeck() {
     const trimmed = ans.trim();
     if (deck.answers.some(a => a.toLowerCase() === trimmed.toLowerCase())) return false;
     const stored = JSON.parse(localStorage.getItem(getStorageKey('custom_answers')) || '[]');
-    localStorage.setItem(getStorageKey('custom_answers'), JSON.stringify([...stored, trimmed]));
+    safeSetItem(getStorageKey('custom_answers'), JSON.stringify([...stored, trimmed]));
     
     if (isAiGenerated) {
       const aiStored = JSON.parse(localStorage.getItem(getStorageKey('ai_answers')) || '[]');
-      localStorage.setItem(getStorageKey('ai_answers'), JSON.stringify([...aiStored, trimmed]));
+      safeSetItem(getStorageKey('ai_answers'), JSON.stringify([...aiStored, trimmed]));
     }
 
     const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_answers')) || '[]');
     const newDeleted = deleted.filter((a: string) => a.toLowerCase() !== trimmed.toLowerCase());
-    localStorage.setItem(getStorageKey('deleted_answers'), JSON.stringify(newDeleted));
+    safeSetItem(getStorageKey('deleted_answers'), JSON.stringify(newDeleted));
     
     loadDeck();
     return true;
@@ -161,11 +172,11 @@ export function useDeck() {
     const custom = JSON.parse(localStorage.getItem(getStorageKey('custom_answers')) || '[]');
     const isCustom = custom.some((a: string) => a.toLowerCase() === ans.toLowerCase());
     if (isCustom) {
-      localStorage.setItem(getStorageKey('custom_answers'), JSON.stringify(custom.filter((a: string) => a.toLowerCase() !== ans.toLowerCase())));
+      safeSetItem(getStorageKey('custom_answers'), JSON.stringify(custom.filter((a: string) => a.toLowerCase() !== ans.toLowerCase())));
     } else {
       const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_answers')) || '[]');
       if (!deleted.some((a: string) => a.toLowerCase() === ans.toLowerCase())) {
-        localStorage.setItem(getStorageKey('deleted_answers'), JSON.stringify([...deleted, ans]));
+        safeSetItem(getStorageKey('deleted_answers'), JSON.stringify([...deleted, ans]));
       }
     }
     loadDeck();
@@ -197,11 +208,11 @@ export function useDeck() {
     
     const newQ = { segmentA: segA, segmentB: segB, segmentC: segC };
     const stored = JSON.parse(localStorage.getItem(getStorageKey('custom_questions')) || '[]');
-    localStorage.setItem(getStorageKey('custom_questions'), JSON.stringify([...stored, newQ]));
+    safeSetItem(getStorageKey('custom_questions'), JSON.stringify([...stored, newQ]));
 
     if (isAiGenerated) {
       const aiStored = JSON.parse(localStorage.getItem(getStorageKey('ai_questions')) || '[]');
-      localStorage.setItem(getStorageKey('ai_questions'), JSON.stringify([...aiStored, newQ]));
+      safeSetItem(getStorageKey('ai_questions'), JSON.stringify([...aiStored, newQ]));
     }
 
     const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_questions')) || '[]');
@@ -210,7 +221,7 @@ export function useDeck() {
       dq.segmentB.toLowerCase() === segB.toLowerCase() && 
       dq.segmentC.toLowerCase() === segC.toLowerCase()
     ));
-    localStorage.setItem(getStorageKey('deleted_questions'), JSON.stringify(newDeleted));
+    safeSetItem(getStorageKey('deleted_questions'), JSON.stringify(newDeleted));
 
     loadDeck();
     return true;
@@ -224,7 +235,7 @@ export function useDeck() {
       cq.segmentC.toLowerCase() === q.segmentC.toLowerCase()
     );
     if (isCustom) {
-      localStorage.setItem(getStorageKey('custom_questions'), JSON.stringify(custom.filter((cq: Question) => !(
+      safeSetItem(getStorageKey('custom_questions'), JSON.stringify(custom.filter((cq: Question) => !(
         cq.segmentA.toLowerCase() === q.segmentA.toLowerCase() && 
         cq.segmentB.toLowerCase() === q.segmentB.toLowerCase() && 
         cq.segmentC.toLowerCase() === q.segmentC.toLowerCase()
@@ -237,7 +248,7 @@ export function useDeck() {
         dq.segmentC.toLowerCase() === q.segmentC.toLowerCase()
       );
       if (!exists) {
-        localStorage.setItem(getStorageKey('deleted_questions'), JSON.stringify([...deleted, q]));
+        safeSetItem(getStorageKey('deleted_questions'), JSON.stringify([...deleted, q]));
       }
     }
     loadDeck();
@@ -329,10 +340,10 @@ export function useDeck() {
       });
     }
 
-    localStorage.setItem(getStorageKey('custom_answers'), JSON.stringify(newCustomAnswers));
-    localStorage.setItem(getStorageKey('deleted_answers'), JSON.stringify(newDeletedAnswers));
-    localStorage.setItem(getStorageKey('custom_questions'), JSON.stringify(newCustomQuestions));
-    localStorage.setItem(getStorageKey('deleted_questions'), JSON.stringify(newDeletedQuestions));
+    safeSetItem(getStorageKey('custom_answers'), JSON.stringify(newCustomAnswers));
+    safeSetItem(getStorageKey('deleted_answers'), JSON.stringify(newDeletedAnswers));
+    safeSetItem(getStorageKey('custom_questions'), JSON.stringify(newCustomQuestions));
+    safeSetItem(getStorageKey('deleted_questions'), JSON.stringify(newDeletedQuestions));
 
     loadDeck();
     return { addedAnswers, addedQuestions, duplicateAnswers, duplicateQuestions };

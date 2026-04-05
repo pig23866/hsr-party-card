@@ -343,10 +343,27 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
     }
   };
 
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 50;
+
+  const handleTabChange = (newTab: 'answer' | 'question') => {
+    setTab(newTab);
+    setSearchTerm('');
+    setPage(1);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setPage(1);
+  };
+
   const filteredAnswers = deck.answers.filter(a => a.toLowerCase().includes(searchTerm.toLowerCase()));
   const filteredQuestions = deck.questions.filter(q => 
     `${q.segmentA} ${q.segmentB} ${q.segmentC}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const paginatedAnswers = filteredAnswers.slice(0, page * itemsPerPage);
+  const paginatedQuestions = filteredQuestions.slice(0, page * itemsPerPage);
 
   return (
     <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col font-sans">
@@ -399,13 +416,13 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
         {/* Tabs */}
         <div className="flex bg-[#7aa8a8] rounded-full p-1 gap-1 shadow-inner">
           <button
-            onClick={() => { setTab('answer'); setSearchTerm(''); }}
+            onClick={() => handleTabChange('answer')}
             className={`flex-1 py-2.5 rounded-full font-bold text-sm transition-all ${tab === 'answer' ? 'bg-white text-[#28a89b] shadow-sm' : 'text-white/80 hover:text-white'}`}
           >
             答案卡
           </button>
           <button
-            onClick={() => { setTab('question'); setSearchTerm(''); }}
+            onClick={() => handleTabChange('question')}
             className={`flex-1 py-2.5 rounded-full font-bold text-sm transition-all ${tab === 'question' ? 'bg-white text-[#28a89b] shadow-sm' : 'text-white/80 hover:text-white'}`}
           >
             題目卡
@@ -503,7 +520,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
           <input 
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={handleSearchChange}
             placeholder={`搜尋${tab === 'answer' ? '答案' : '題目'}...`}
             className="bg-transparent border-none outline-none text-gray-800 w-full font-medium"
           />
@@ -516,7 +533,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
         <div className="flex-1 pb-12">
           {tab === 'answer' ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 pt-2">
-              {filteredAnswers.map((ans, idx) => {
+              {paginatedAnswers.map((ans, idx) => {
                 const isAi = aiAnswers.some(a => a.toLowerCase() === ans.toLowerCase());
                 return (
                 <div key={idx} className="relative">
@@ -558,10 +575,20 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
               {filteredAnswers.length === 0 && (
                 <div className="col-span-2 text-center text-gray-500 py-8 font-medium">找不到符合的答案卡</div>
               )}
+              {page * itemsPerPage < filteredAnswers.length && (
+                <div className="col-span-2 flex justify-center mt-4">
+                  <button 
+                    onClick={() => setPage(p => p + 1)}
+                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-6 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors"
+                  >
+                    載入更多
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-6 pt-2">
-              {filteredQuestions.map((q, idx) => {
+              {paginatedQuestions.map((q, idx) => {
                 const isAi = aiQuestions.some(aq => 
                   aq.segmentA.toLowerCase() === q.segmentA.toLowerCase() && 
                   aq.segmentB.toLowerCase() === q.segmentB.toLowerCase() && 
@@ -635,6 +662,16 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
               })}
               {filteredQuestions.length === 0 && (
                 <div className="text-center text-gray-500 py-8 font-medium">找不到符合的題目卡</div>
+              )}
+              {page * itemsPerPage < filteredQuestions.length && (
+                <div className="flex justify-center mt-4">
+                  <button 
+                    onClick={() => setPage(p => p + 1)}
+                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-6 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors"
+                  >
+                    載入更多
+                  </button>
+                </div>
               )}
             </div>
           )}
