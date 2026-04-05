@@ -42,7 +42,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
   const [showImportModal, setShowImportModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [importText, setImportText] = useState('');
-  const [exportConfirmConfig, setExportConfirmConfig] = useState<{type: 'txt' | 'html', numFiles: number, message: string} | null>(null);
+  const [exportConfirmConfig, setExportConfirmConfig] = useState<{type: 'txt-select' | 'html', numFiles?: number, message?: string} | null>(null);
   const [importReport, setImportReport] = useState<{ addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,9 +126,15 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
   };
 
   const triggerExportTxt = () => {
-    const maxAnswers = 200;
-    const maxQuestions = 100;
-    
+    setExportConfirmConfig({
+      type: 'txt-select'
+    });
+  };
+
+  const executeExportTxt = (version: 'mobile' | 'desktop') => {
+    const maxAnswers = version === 'desktop' ? 600 : 200;
+    const maxQuestions = version === 'desktop' ? 300 : 100;
+
     const totalAnswers = deck.answers.length;
     const totalQuestions = deck.questions.length;
     
@@ -137,19 +143,6 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
       Math.ceil(totalQuestions / maxQuestions),
       1
     );
-
-    setExportConfirmConfig({
-      type: 'txt',
-      numFiles,
-      message: numFiles > 1 
-        ? `卡牌數量較多，將為您匯出 ${numFiles} 個 TXT 檔案！`
-        : `將為您匯出 1 個 TXT 檔案！`
-    });
-  };
-
-  const executeExportTxt = (numFiles: number) => {
-    const maxAnswers = 200;
-    const maxQuestions = 100;
 
     for (let i = 0; i < numFiles; i++) {
       const chunkAnswers = deck.answers.slice(i * maxAnswers, (i + 1) * maxAnswers);
@@ -163,7 +156,9 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
         label: labelName,
         createdAt: Math.floor(Date.now() / 1000),
         answers: chunkAnswers,
-        questions: chunkQuestions
+        questions: chunkQuestions,
+        imageAnswers: [],
+        imageQuestions: []
       };
 
       const jsonString = JSON.stringify(exportData);
@@ -813,32 +808,56 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
               className="bg-[#f4f7f7] border-4 border-[#28a89b] rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4 text-center"
             >
               <div className="mx-auto bg-[#28a89b]/10 p-4 rounded-full mb-2">
-                {exportConfirmConfig.type === 'txt' ? <Download className="w-10 h-10 text-[#28a89b]" /> : <FileCode className="w-10 h-10 text-[#28a89b]" />}
+                {exportConfirmConfig.type.startsWith('txt') ? <Download className="w-10 h-10 text-[#28a89b]" /> : <FileCode className="w-10 h-10 text-[#28a89b]" />}
               </div>
-              <h3 className="text-xl font-bold text-[#476a6f]">確認匯出</h3>
-              <p className="text-gray-600 font-medium mb-4">
-                {exportConfirmConfig.message}
-              </p>
-              <div className="flex justify-center gap-3">
-                <button 
-                  onClick={() => setExportConfirmConfig(null)}
-                  className="px-6 py-2.5 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors flex-1"
-                >
-                  取消
-                </button>
-                <button 
-                  onClick={() => {
-                    if (exportConfirmConfig.type === 'txt') {
-                      executeExportTxt(exportConfirmConfig.numFiles);
-                    } else {
-                      executeExportHtml();
-                    }
-                  }}
-                  className="px-6 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm flex-1"
-                >
-                  確認下載
-                </button>
-              </div>
+              <h3 className="text-xl font-bold text-[#476a6f]">
+                {exportConfirmConfig.type === 'txt-select' ? '選擇匯出版本' : '確認匯出'}
+              </h3>
+              
+              {exportConfirmConfig.type === 'txt-select' ? (
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => executeExportTxt('mobile')}
+                    className="px-6 py-3 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm w-full"
+                  >
+                    手機版 (200答案/100題目)
+                  </button>
+                  <button 
+                    onClick={() => executeExportTxt('desktop')}
+                    className="px-6 py-3 font-bold bg-[#476a6f] text-white hover:bg-[#365256] rounded-xl transition-colors shadow-sm w-full"
+                  >
+                    電腦版 (600答案/300題目)
+                  </button>
+                  <button 
+                    onClick={() => setExportConfirmConfig(null)}
+                    className="px-6 py-2.5 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors w-full mt-2"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-gray-600 font-medium mb-4">
+                    {exportConfirmConfig.message}
+                  </p>
+                  <div className="flex justify-center gap-3">
+                    <button 
+                      onClick={() => setExportConfirmConfig(null)}
+                      className="px-6 py-2.5 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors flex-1"
+                    >
+                      取消
+                    </button>
+                    <button 
+                      onClick={() => {
+                        executeExportHtml();
+                      }}
+                      className="px-6 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm flex-1"
+                    >
+                      確認下載
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}
