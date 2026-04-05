@@ -284,8 +284,8 @@ export function useDeck() {
   const bulkImport = (data: any) => {
     let addedAnswers = 0;
     let addedQuestions = 0;
-    let duplicateAnswers = 0;
-    let duplicateQuestions = 0;
+    const duplicateAnswers: string[] = [];
+    const duplicateQuestions: Question[] = [];
 
     const storedAnswers = JSON.parse(localStorage.getItem(getStorageKey('custom_answers')) || '[]');
     const deletedAnswers = JSON.parse(localStorage.getItem(getStorageKey('deleted_answers')) || '[]');
@@ -308,7 +308,7 @@ export function useDeck() {
         
         const lower = trimmed.toLowerCase();
         if (currentAnswersLower.has(lower)) {
-          duplicateAnswers++;
+          duplicateAnswers.push(trimmed);
         } else {
           newCustomAnswers.push(trimmed);
           currentAnswersLower.add(lower);
@@ -328,7 +328,7 @@ export function useDeck() {
 
         const key = `${segA.toLowerCase()}|${segB.toLowerCase()}|${segC.toLowerCase()}`;
         if (currentQuestionsLower.has(key)) {
-          duplicateQuestions++;
+          duplicateQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
         } else {
           newCustomQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
           currentQuestionsLower.add(key);

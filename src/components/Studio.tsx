@@ -17,7 +17,7 @@ interface StudioProps {
   addQuestion: (q: Question, isAiGenerated?: boolean) => boolean;
   deleteQuestion: (q: Question) => void;
   editQuestion: (oldQ: Question, newQ: Question) => boolean;
-  bulkImport: (data: any) => { addedAnswers: number, addedQuestions: number, duplicateAnswers: number, duplicateQuestions: number };
+  bulkImport: (data: any) => { addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] };
 }
 
 export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport }: StudioProps) {
@@ -41,12 +41,21 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [exportConfirmConfig, setExportConfirmConfig] = useState<{type: 'txt' | 'html', numFiles: number, message: string} | null>(null);
+  const [importReport, setImportReport] = useState<{ addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showStatus = (type: 'success' | 'error' | 'info', msg: string) => {
     setStatus({ type, msg });
     setTimeout(() => setStatus(null), 4000);
+  };
+
+  const processImportResult = (result: { addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] }) => {
+    if (result.duplicateAnswers.length > 0 || result.duplicateQuestions.length > 0) {
+      setImportReport(result);
+    } else {
+      showStatus('success', `匯入成功！新增 ${result.addedAnswers} 答案, ${result.addedQuestions} 題目。`);
+    }
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,7 +67,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
       try {
         const json = JSON.parse(event.target?.result as string);
         const result = bulkImport(json);
-        showStatus('success', `匯入成功！新增 ${result.addedAnswers} 答案, ${result.addedQuestions} 題目。跳過 ${result.duplicateAnswers + result.duplicateQuestions} 個重複項目。`);
+        processImportResult(result);
       } catch (error) {
         showStatus('error', 'JSON 格式錯誤，匯入失敗！');
       }
@@ -75,7 +84,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
       }
       const json = JSON.parse(importText);
       const result = bulkImport(json);
-      showStatus('success', `匯入成功！新增 ${result.addedAnswers} 答案, ${result.addedQuestions} 題目。跳過 ${result.duplicateAnswers + result.duplicateQuestions} 個重複項目。`);
+      processImportResult(result);
       setShowImportModal(false);
       setImportText('');
     } catch (error) {
@@ -785,6 +794,73 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
                   className="px-6 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm flex-1"
                 >
                   確認下載
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Import Report Modal */}
+        {importReport && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#f4f7f7] border-4 border-[#28a89b] rounded-3xl p-6 max-w-2xl w-full shadow-2xl flex flex-col gap-4 max-h-[80vh]"
+            >
+              <div className="flex justify-between items-center border-b-2 border-[#d1dfdf] pb-4">
+                <h3 className="text-xl font-bold text-[#476a6f] flex items-center gap-2">
+                  <Check className="w-6 h-6 text-green-500" />
+                  匯入完成報告
+                </h3>
+                <button onClick={() => setImportReport(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="flex gap-4 font-bold text-gray-700">
+                <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg">
+                  新增：{importReport.addedAnswers} 答案 / {importReport.addedQuestions} 題目
+                </div>
+                <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg">
+                  跳過重複：{importReport.duplicateAnswers.length} 答案 / {importReport.duplicateQuestions.length} 題目
+                </div>
+              </div>
+
+              <div className="overflow-y-auto flex-1 pr-2 space-y-4 custom-scrollbar">
+                {importReport.duplicateAnswers.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-gray-600 mb-2 sticky top-0 bg-[#f4f7f7] py-1">重複的答案卡：</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {importReport.duplicateAnswers.map((ans, i) => (
+                        <span key={i} className="bg-white border border-gray-300 rounded-full px-3 py-1 text-sm text-gray-600 shadow-sm">
+                          {ans}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {importReport.duplicateQuestions.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-gray-600 mb-2 sticky top-0 bg-[#f4f7f7] py-1">重複的題目卡：</h4>
+                    <div className="flex flex-col gap-2">
+                      {importReport.duplicateQuestions.map((q, i) => (
+                        <div key={i} className="bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-600 shadow-sm">
+                          {q.segmentA} <span className="inline-block w-6 border-b border-gray-400 mx-1 align-middle"></span> {q.segmentB} {q.segmentC && <><span className="inline-block w-6 border-b border-gray-400 mx-1 align-middle"></span> {q.segmentC}</>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-4 border-t-2 border-[#d1dfdf]">
+                <button 
+                  onClick={() => setImportReport(null)}
+                  className="px-8 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm"
+                >
+                  我知道了
                 </button>
               </div>
             </motion.div>
