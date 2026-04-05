@@ -174,6 +174,21 @@ export function useDeck() {
     return true;
   };
 
+  const resetDeckToDefault = (id: string = activeDeckId) => {
+    // Only remove custom and deleted keys, keeping the base packs intact
+    localStorage.removeItem(getStorageKey('custom_answers', id));
+    localStorage.removeItem(getStorageKey('deleted_answers', id));
+    localStorage.removeItem(getStorageKey('custom_questions', id));
+    localStorage.removeItem(getStorageKey('deleted_questions', id));
+    localStorage.removeItem(getStorageKey('ai_answers', id));
+    localStorage.removeItem(getStorageKey('ai_questions', id));
+
+    if (activeDeckId === id) {
+      loadDeck(id);
+    }
+    return true;
+  };
+
   const renameDeck = (id: string, newName: string) => {
     const newList = decks.map(d => d.id === id ? { ...d, name: newName } : d);
     safeSetItem('deck_list', JSON.stringify(newList));
@@ -412,6 +427,7 @@ export function useDeck() {
     createDeck,
     deleteDeck,
     clearDeck,
+    resetDeckToDefault,
     renameDeck,
     switchDeck
   };

@@ -24,6 +24,7 @@ export default function App() {
     createDeck,
     deleteDeck,
     clearDeck,
+    resetDeckToDefault,
     renameDeck,
     switchDeck
   } = useDeck();
@@ -65,6 +66,7 @@ export default function App() {
           deleteQuestion={deleteQuestion}
           editQuestion={editQuestion}
           bulkImport={bulkImport}
+          resetDeckToDefault={resetDeckToDefault}
         />
       )}
     </>

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Sparkles, Plus, Check, AlertCircle, X, Search, Edit2, Save, Download, Upload, ClipboardPaste, FileCode, FileText } from 'lucide-react';
+import { ArrowLeft, Sparkles, Plus, Check, AlertCircle, X, Search, Edit2, Save, Download, Upload, ClipboardPaste, FileCode, FileText, RotateCcw } from 'lucide-react';
 import { Question } from '../data/packs';
 import { Deck, DeckMetadata } from '../hooks/useDeck';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -18,9 +18,10 @@ interface StudioProps {
   deleteQuestion: (q: Question) => void;
   editQuestion: (oldQ: Question, newQ: Question) => boolean;
   bulkImport: (data: any) => { addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] };
+  resetDeckToDefault: (id?: string) => void;
 }
 
-export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport }: StudioProps) {
+export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport, resetDeckToDefault }: StudioProps) {
   const [tab, setTab] = useState<'answer' | 'question'>('answer');
   const [answerInput, setAnswerInput] = useState('');
   const [smartQuestionInput, setSmartQuestionInput] = useState('');
@@ -39,6 +40,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
   const [aiCount, setAiCount] = useState(5);
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [importText, setImportText] = useState('');
   const [exportConfirmConfig, setExportConfirmConfig] = useState<{type: 'txt' | 'html', numFiles: number, message: string} | null>(null);
   const [importReport, setImportReport] = useState<{ addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] } | null>(null);
@@ -389,6 +391,15 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
           {activeDeck.name}
         </div>
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setShowResetConfirm(true)}
+            className="flex items-center gap-1 hover:text-red-300 transition-colors text-sm font-bold"
+            title="清空自訂"
+          >
+            <RotateCcw className="w-5 h-5" />
+            <span className="hidden sm:inline">清空自訂</span>
+          </button>
+          <div className="w-px h-4 bg-white/30 hidden sm:block"></div>
           <button 
             onClick={triggerExportHtml}
             className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
@@ -861,6 +872,48 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
                   className="px-8 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm"
                 >
                   我知道了
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {/* Reset Confirm Modal */}
+        {showResetConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#f4f7f7] border-4 border-[#28a89b] rounded-3xl p-6 max-w-md w-full shadow-2xl flex flex-col gap-4"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-xl font-bold text-[#476a6f] flex items-center gap-2">
+                  <AlertCircle className="w-6 h-6 text-red-500" />
+                  清空自訂卡牌
+                </h3>
+                <button onClick={() => setShowResetConfirm(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <p className="text-gray-600 font-medium">
+                確定要清空所有自訂的題目與答案卡嗎？<br/>
+                此操作將會保留預設卡牌，但所有您自己新增的卡牌都會被永久刪除，且無法復原。
+              </p>
+              <div className="flex justify-end gap-3 mt-4">
+                <button 
+                  onClick={() => setShowResetConfirm(false)}
+                  className="px-6 py-2.5 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={() => {
+                    resetDeckToDefault();
+                    setShowResetConfirm(false);
+                    showStatus('success', '已清空自訂卡牌！');
+                  }}
+                  className="px-6 py-2.5 font-bold bg-red-500 text-white hover:bg-red-600 rounded-xl transition-colors shadow-sm"
+                >
+                  確定清空
                 </button>
               </div>
             </motion.div>
