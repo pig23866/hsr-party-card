@@ -408,6 +408,11 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
   const aiAnswersSet = React.useMemo(() => new Set(aiAnswers.map(a => a.toLowerCase())), [aiAnswers]);
   const aiQuestionsSet = React.useMemo(() => new Set(aiQuestions.map(q => `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`)), [aiQuestions]);
 
+  const totalAnswers = deck.answers.length;
+  const totalQuestions = deck.questions.length;
+  const mobileFilesCount = Math.max(Math.ceil(totalAnswers / 200), Math.ceil(totalQuestions / 100), 1);
+  const desktopFilesCount = Math.max(Math.ceil(totalAnswers / 600), Math.ceil(totalQuestions / 300), 1);
+
   return (
     <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col font-sans">
       <header className="p-4 bg-[#28a89b] text-white flex items-center justify-between shadow-md sticky top-0 z-20">
@@ -820,15 +825,17 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
                 <div className="flex flex-col gap-3">
                   <button 
                     onClick={() => executeExportTxt('mobile')}
-                    className="px-6 py-3 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm w-full"
+                    className="px-6 py-3 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm w-full flex flex-col items-center gap-1"
                   >
-                    手機版 (200答案/100題目)
+                    <span>手機版 (200答案/100題目)</span>
+                    <span className="text-sm font-normal opacity-90">將匯出 {mobileFilesCount} 個檔案</span>
                   </button>
                   <button 
                     onClick={() => executeExportTxt('desktop')}
-                    className="px-6 py-3 font-bold bg-[#476a6f] text-white hover:bg-[#365256] rounded-xl transition-colors shadow-sm w-full"
+                    className="px-6 py-3 font-bold bg-[#476a6f] text-white hover:bg-[#365256] rounded-xl transition-colors shadow-sm w-full flex flex-col items-center gap-1"
                   >
-                    電腦版 (600答案/300題目)
+                    <span>電腦版 (600答案/300題目)</span>
+                    <span className="text-sm font-normal opacity-90">將匯出 {desktopFilesCount} 個檔案</span>
                   </button>
                   <button 
                     onClick={() => setExportConfirmConfig(null)}
