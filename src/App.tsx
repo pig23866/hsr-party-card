@@ -23,6 +23,7 @@ export default function App() {
     bulkImport,
     createDeck,
     deleteDeck,
+    clearDeck,
     renameDeck,
     switchDeck
   } = useDeck();
@@ -38,6 +39,7 @@ export default function App() {
           onOpenStudio={() => setView('studio')} 
           createDeck={createDeck}
           deleteDeck={deleteDeck}
+          clearDeck={clearDeck}
           renameDeck={renameDeck}
           switchDeck={switchDeck}
         />

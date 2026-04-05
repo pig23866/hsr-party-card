@@ -45,22 +45,36 @@ export function useDeck() {
     const baseQuestions = deckId === 'default' ? packs.flatMap(p => p.questions) : [];
 
     const allAnswers = [...baseAnswers, ...storedAnswers];
-    const uniqueAnswers = allAnswers.filter((a, index, self) => 
-      index === self.findIndex((t) => t.toLowerCase() === a.toLowerCase())
-    ).filter(a => !deletedAnswers.some((da: string) => da.toLowerCase() === a.toLowerCase()));
+    
+    // Optimize deduplication using Set (O(N) instead of O(N^2))
+    const deletedAnswersSet = new Set(deletedAnswers.map((a: string) => a.toLowerCase()));
+    const seenAnswers = new Set<string>();
+    const uniqueAnswers: string[] = [];
+
+    for (const a of allAnswers) {
+      const lower = a.toLowerCase();
+      if (!seenAnswers.has(lower) && !deletedAnswersSet.has(lower)) {
+        seenAnswers.add(lower);
+        uniqueAnswers.push(a);
+      }
+    }
 
     const allQuestions = [...baseQuestions, ...storedQuestions];
-    const uniqueQuestions = allQuestions.filter((q, index, self) =>
-      index === self.findIndex((t) => (
-        t.segmentA.toLowerCase() === q.segmentA.toLowerCase() && 
-        t.segmentB.toLowerCase() === q.segmentB.toLowerCase() && 
-        t.segmentC.toLowerCase() === q.segmentC.toLowerCase()
-      ))
-    ).filter(q => !deletedQuestions.some((dq: Question) => 
-      dq.segmentA.toLowerCase() === q.segmentA.toLowerCase() && 
-      dq.segmentB.toLowerCase() === q.segmentB.toLowerCase() && 
-      dq.segmentC.toLowerCase() === q.segmentC.toLowerCase()
+    
+    // Optimize deduplication using Set (O(N) instead of O(N^2))
+    const deletedQuestionsSet = new Set(deletedQuestions.map((q: Question) => 
+      `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`
     ));
+    const seenQuestions = new Set<string>();
+    const uniqueQuestions: Question[] = [];
+
+    for (const q of allQuestions) {
+      const key = `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`;
+      if (!seenQuestions.has(key) && !deletedQuestionsSet.has(key)) {
+        seenQuestions.add(key);
+        uniqueQuestions.push(q);
+      }
+    }
 
     setDeck({ answers: uniqueAnswers, questions: uniqueQuestions });
     setAiAnswers(JSON.parse(localStorage.getItem(getStorageKey('ai_answers', deckId)) || '[]'));
@@ -133,6 +147,29 @@ export function useDeck() {
 
     if (activeDeckId === id) {
       switchDeck('default');
+    }
+    return true;
+  };
+
+  const clearDeck = (id: string) => {
+    // Clean up data
+    localStorage.removeItem(getStorageKey('custom_answers', id));
+    localStorage.removeItem(getStorageKey('deleted_answers', id));
+    localStorage.removeItem(getStorageKey('custom_questions', id));
+    localStorage.removeItem(getStorageKey('deleted_questions', id));
+    localStorage.removeItem(getStorageKey('ai_answers', id));
+    localStorage.removeItem(getStorageKey('ai_questions', id));
+
+    // 確保要有一組可以遊玩的卡組 (Ensure there is a playable deck)
+    if (id === 'default') {
+      const basicAnswers = ['這是一個好遊戲', '填空派對', '開心的笑容'];
+      const basicQuestions = [{ segmentA: '今天玩了', segmentB: '，感覺', segmentC: '' }];
+      safeSetItem(getStorageKey('custom_answers', id), JSON.stringify(basicAnswers));
+      safeSetItem(getStorageKey('custom_questions', id), JSON.stringify(basicQuestions));
+    }
+
+    if (activeDeckId === id) {
+      loadDeck(id);
     }
     return true;
   };
@@ -301,6 +338,7 @@ export function useDeck() {
     const currentQuestionsLower = new Set(deck.questions.map(q => `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`));
 
     if (data.answers && Array.isArray(data.answers)) {
+      const answersToRemoveFromDeleted = new Set<string>();
       data.answers.forEach((ans: string) => {
         if (typeof ans !== 'string') return;
         const trimmed = ans.trim();
@@ -312,13 +350,17 @@ export function useDeck() {
         } else {
           newCustomAnswers.push(trimmed);
           currentAnswersLower.add(lower);
-          newDeletedAnswers = newDeletedAnswers.filter(a => a.toLowerCase() !== lower);
+          answersToRemoveFromDeleted.add(lower);
           addedAnswers++;
         }
       });
+      if (answersToRemoveFromDeleted.size > 0) {
+        newDeletedAnswers = newDeletedAnswers.filter(a => !answersToRemoveFromDeleted.has(a.toLowerCase()));
+      }
     }
 
     if (data.questions && Array.isArray(data.questions)) {
+      const questionsToRemoveFromDeleted = new Set<string>();
       data.questions.forEach((q: any) => {
         if (!q || typeof q !== 'object') return;
         const segA = (q.segmentA || '').toString().trim();
@@ -332,12 +374,15 @@ export function useDeck() {
         } else {
           newCustomQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
           currentQuestionsLower.add(key);
-          newDeletedQuestions = newDeletedQuestions.filter(dq => 
-            `${dq.segmentA.toLowerCase()}|${dq.segmentB.toLowerCase()}|${dq.segmentC.toLowerCase()}` !== key
-          );
+          questionsToRemoveFromDeleted.add(key);
           addedQuestions++;
         }
       });
+      if (questionsToRemoveFromDeleted.size > 0) {
+        newDeletedQuestions = newDeletedQuestions.filter(dq => 
+          !questionsToRemoveFromDeleted.has(`${dq.segmentA.toLowerCase()}|${dq.segmentB.toLowerCase()}|${dq.segmentC.toLowerCase()}`)
+        );
+      }
     }
 
     safeSetItem(getStorageKey('custom_answers'), JSON.stringify(newCustomAnswers));
@@ -366,6 +411,7 @@ export function useDeck() {
     bulkImport,
     createDeck,
     deleteDeck,
+    clearDeck,
     renameDeck,
     switchDeck
   };

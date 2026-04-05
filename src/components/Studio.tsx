@@ -374,6 +374,10 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
   const paginatedAnswers = filteredAnswers.slice(0, page * itemsPerPage);
   const paginatedQuestions = filteredQuestions.slice(0, page * itemsPerPage);
 
+  // Optimize AI lookups
+  const aiAnswersSet = React.useMemo(() => new Set(aiAnswers.map(a => a.toLowerCase())), [aiAnswers]);
+  const aiQuestionsSet = React.useMemo(() => new Set(aiQuestions.map(q => `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`)), [aiQuestions]);
+
   return (
     <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col font-sans">
       <header className="p-4 bg-[#28a89b] text-white flex items-center justify-between shadow-md sticky top-0 z-20">
@@ -543,7 +547,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
           {tab === 'answer' ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 pt-2">
               {paginatedAnswers.map((ans, idx) => {
-                const isAi = aiAnswers.some(a => a.toLowerCase() === ans.toLowerCase());
+                const isAi = aiAnswersSet.has(ans.toLowerCase());
                 return (
                 <div key={idx} className="relative">
                   {editingAnswer === ans ? (
@@ -598,11 +602,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
           ) : (
             <div className="flex flex-col gap-6 pt-2">
               {paginatedQuestions.map((q, idx) => {
-                const isAi = aiQuestions.some(aq => 
-                  aq.segmentA.toLowerCase() === q.segmentA.toLowerCase() && 
-                  aq.segmentB.toLowerCase() === q.segmentB.toLowerCase() && 
-                  aq.segmentC.toLowerCase() === q.segmentC.toLowerCase()
-                );
+                const isAi = aiQuestionsSet.has(`${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`);
                 return (
                 <div key={idx} className={`relative border-2 rounded-2xl p-5 shadow-md ${isAi ? 'bg-gradient-to-br from-[#f4f7f7] to-[#e6f0f0] border-yellow-400' : 'bg-[#f4f7f7] border-[#476a6f]'}`}>
                   {editingQuestion === q ? (

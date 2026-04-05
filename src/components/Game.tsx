@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Question } from '../data/packs';
 import { Deck, DeckMetadata } from '../hooks/useDeck';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, RefreshCw, CheckCircle2, ChevronRight, History, X } from 'lucide-react';
+import { ArrowLeft, RefreshCw, CheckCircle2, ChevronRight, History, X, Download } from 'lucide-react';
+import { toJpeg } from 'html-to-image';
 
 interface GameProps {
   deck: Deck;
@@ -22,8 +23,20 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
   const [hand, setHand] = useState<string[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [history, setHistory] = useState<HistoryRecord[]>([]);
+  const [history, setHistory] = useState<HistoryRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(`deck_${activeDeck.id}_history`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [showHistory, setShowHistory] = useState(false);
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(`deck_${activeDeck.id}_history`, JSON.stringify(history));
+  }, [history, activeDeck.id]);
 
   // Initialize game
   useEffect(() => {
@@ -108,6 +121,25 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
 
   const blanksCount = getBlanksCount(question);
   const canSubmit = selectedAnswers.length === blanksCount;
+
+  const saveAsImage = async (id: string) => {
+    const element = document.getElementById(`history-record-${id}`);
+    if (!element) return;
+    
+    try {
+      const dataUrl = await toJpeg(element, {
+        quality: 0.9,
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+      });
+      const link = document.createElement('a');
+      link.download = `填空派對-${new Date().getTime()}.jpg`;
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error('Failed to save image', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col font-sans">
@@ -283,21 +315,30 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
                 <div className="text-center text-gray-500 py-8 font-bold">尚無歷史紀錄</div>
               ) : (
                 history.map(record => (
-                  <div key={record.id} className="bg-white p-4 rounded-xl border-2 border-[#d1dfdf] shadow-sm">
-                    <div className="text-lg font-bold leading-relaxed text-gray-800">
-                      {record.question.segmentA && <span>{record.question.segmentA}</span>}
-                      <span className="mx-2 text-[#28a89b] underline decoration-2 underline-offset-4">{record.answers[0]}</span>
-                      {record.question.segmentB && <span>{record.question.segmentB}</span>}
-                      {record.answers.length > 1 && (
-                        <>
-                          <span className="mx-2 text-[#28a89b] underline decoration-2 underline-offset-4">{record.answers[1]}</span>
-                          {record.question.segmentC && <span>{record.question.segmentC}</span>}
-                        </>
-                      )}
+                  <div key={record.id} className="bg-white p-4 rounded-xl border-2 border-[#d1dfdf] shadow-sm relative group">
+                    <div id={`history-record-${record.id}`} className="p-2 bg-white rounded-lg">
+                      <div className="text-lg font-bold leading-relaxed text-gray-800">
+                        {record.question.segmentA && <span>{record.question.segmentA}</span>}
+                        <span className="mx-2 text-[#28a89b] underline decoration-2 underline-offset-4">{record.answers[0]}</span>
+                        {record.question.segmentB && <span>{record.question.segmentB}</span>}
+                        {record.answers.length > 1 && (
+                          <>
+                            <span className="mx-2 text-[#28a89b] underline decoration-2 underline-offset-4">{record.answers[1]}</span>
+                            {record.question.segmentC && <span>{record.question.segmentC}</span>}
+                          </>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-2 text-right">
+                        {new Date(record.timestamp).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 mt-2 text-right">
-                      {new Date(record.timestamp).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+                    <button 
+                      onClick={() => saveAsImage(record.id)}
+                      className="absolute top-2 right-2 p-2 bg-[#f4f7f7] text-[#28a89b] rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#e0eaea]"
+                      title="儲存為圖片"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
                   </div>
                 ))
               )}

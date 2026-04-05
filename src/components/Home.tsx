@@ -11,6 +11,7 @@ interface HomeProps {
   onOpenStudio: () => void;
   createDeck: (name: string) => string;
   deleteDeck: (id: string) => boolean;
+  clearDeck: (id: string) => boolean;
   renameDeck: (id: string, name: string) => boolean;
   switchDeck: (id: string) => void;
 }
@@ -23,6 +24,7 @@ export function Home({
   onOpenStudio,
   createDeck,
   deleteDeck,
+  clearDeck,
   renameDeck,
   switchDeck
 }: HomeProps) {
@@ -31,6 +33,7 @@ export function Home({
   const [renameInput, setRenameInput] = useState('');
   const [createInput, setCreateInput] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [clearConfirmId, setClearConfirmId] = useState<string | null>(null);
   const [status, setStatus] = useState<{ type: 'error' | 'info', msg: string } | null>(null);
 
   const showStatus = (type: 'error' | 'info', msg: string) => {
@@ -179,6 +182,14 @@ export function Home({
                           <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-1.5 bg-gray-300 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-400 transition-colors">取消</button>
                         </div>
                       </div>
+                    ) : clearConfirmId === d.id ? (
+                      <div className="flex flex-col gap-2">
+                        <span className="text-sm font-bold text-orange-600">確定要清空「{d.name}」嗎？將會保留一組基本卡牌。</span>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => { clearDeck(d.id); setClearConfirmId(null); }} className="flex-1 py-1.5 bg-orange-500 text-white text-sm font-bold rounded-xl hover:bg-orange-600 transition-colors">確認清空</button>
+                          <button onClick={() => setClearConfirmId(null)} className="flex-1 py-1.5 bg-gray-300 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-400 transition-colors">取消</button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-between gap-2">
                         <button
@@ -192,8 +203,12 @@ export function Home({
                           <button onClick={() => { setIsRenaming(d.id); setRenameInput(d.name); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-xl transition-colors" title="重新命名">
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          {d.id !== 'default' && (
+                          {d.id !== 'default' ? (
                             <button onClick={() => setDeleteConfirmId(d.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-xl transition-colors" title="刪除資料庫">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button onClick={() => setClearConfirmId(d.id)} className="p-2 text-orange-500 hover:bg-orange-100 rounded-xl transition-colors" title="清空資料庫">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
