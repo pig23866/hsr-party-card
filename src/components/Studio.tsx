@@ -68,7 +68,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
     const allQuestions: any[] = [];
     let hasError = false;
 
-    const readPromises = Array.from(files).map(file => {
+    const readPromises = Array.from(files).map((file: File) => {
       return new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = (event) => {
