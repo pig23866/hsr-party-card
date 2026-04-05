@@ -12,6 +12,7 @@ export default function App() {
     deck, 
     decks,
     activeDeck,
+    storageUsage,
     aiAnswers, 
     aiQuestions, 
     addAnswer, 
@@ -56,6 +57,7 @@ export default function App() {
         <Studio 
           deck={deck}
           activeDeck={activeDeck}
+          storageUsage={storageUsage}
           aiAnswers={aiAnswers}
           aiQuestions={aiQuestions}
           onBack={() => setView('home')}

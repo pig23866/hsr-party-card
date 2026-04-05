@@ -8,6 +8,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 interface StudioProps {
   deck: Deck;
   activeDeck: DeckMetadata;
+  storageUsage: { usage: number, limit: number, ratio: number };
   aiAnswers: string[];
   aiQuestions: Question[];
   onBack: () => void;
@@ -21,7 +22,7 @@ interface StudioProps {
   resetDeckToDefault: (id?: string) => void;
 }
 
-export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport, resetDeckToDefault }: StudioProps) {
+export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport, resetDeckToDefault }: StudioProps) {
   const [tab, setTab] = useState<'answer' | 'question'>('answer');
   const [answerInput, setAnswerInput] = useState('');
   const [smartQuestionInput, setSmartQuestionInput] = useState('');
@@ -401,8 +402,10 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
     `${q.segmentA} ${q.segmentB} ${q.segmentC}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const paginatedAnswers = filteredAnswers.slice(0, page * itemsPerPage);
-  const paginatedQuestions = filteredQuestions.slice(0, page * itemsPerPage);
+  const paginatedAnswers = filteredAnswers.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const paginatedQuestions = filteredQuestions.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const totalAnswerPages = Math.ceil(filteredAnswers.length / itemsPerPage);
+  const totalQuestionPages = Math.ceil(filteredQuestions.length / itemsPerPage);
 
   // Optimize AI lookups
   const aiAnswersSet = React.useMemo(() => new Set(aiAnswers.map(a => a.toLowerCase())), [aiAnswers]);
@@ -415,15 +418,29 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
 
   return (
     <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col font-sans">
-      <header className="p-4 bg-[#28a89b] text-white flex items-center justify-between shadow-md sticky top-0 z-20">
-        <button onClick={onBack} className="flex items-center gap-2 hover:text-yellow-300 transition-colors">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <div className="font-bold text-lg tracking-wider flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-yellow-300" />
-          {activeDeck.name}
+      <header className="p-4 bg-[#28a89b] text-white flex items-center justify-between shadow-md sticky top-0 z-20 flex-wrap gap-y-2">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="flex items-center gap-2 hover:text-yellow-300 transition-colors">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div className="font-bold text-lg tracking-wider flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-yellow-300" />
+            {activeDeck.name}
+          </div>
         </div>
         <div className="flex items-center gap-4">
+          <div className="hidden md:flex flex-col items-end mr-2">
+            <div className="text-xs font-medium opacity-90 mb-1">儲存空間使用量</div>
+            <div className="w-24 h-2 bg-black/20 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full ${storageUsage.ratio > 0.9 ? 'bg-red-400' : storageUsage.ratio > 0.7 ? 'bg-yellow-400' : 'bg-green-400'}`}
+                style={{ width: `${Math.min(100, storageUsage.ratio * 100)}%` }}
+              />
+            </div>
+            <div className="text-[10px] opacity-80 mt-0.5">
+              {(storageUsage.usage / 1024 / 1024).toFixed(2)} / {(storageUsage.limit / 1024 / 1024).toFixed(0)} MB
+            </div>
+          </div>
           <button 
             onClick={() => setShowResetConfirm(true)}
             className="flex items-center gap-1 hover:text-red-300 transition-colors text-sm font-bold"
@@ -633,13 +650,24 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
               {filteredAnswers.length === 0 && (
                 <div className="col-span-2 text-center text-gray-500 py-8 font-medium">找不到符合的答案卡</div>
               )}
-              {page * itemsPerPage < filteredAnswers.length && (
-                <div className="col-span-2 flex justify-center mt-4">
+              {totalAnswerPages > 1 && (
+                <div className="col-span-2 flex justify-center items-center gap-4 mt-4">
                   <button 
-                    onClick={() => setPage(p => p + 1)}
-                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-6 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-4 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    載入更多
+                    上一頁
+                  </button>
+                  <span className="text-gray-600 font-bold">
+                    {page} / {totalAnswerPages}
+                  </span>
+                  <button 
+                    onClick={() => setPage(p => Math.min(totalAnswerPages, p + 1))}
+                    disabled={page === totalAnswerPages}
+                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-4 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    下一頁
                   </button>
                 </div>
               )}
@@ -689,13 +717,16 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
                           <Sparkles className="w-3 h-3" /> AI 生成
                         </div>
                       )}
-                      <div className="text-lg font-bold text-gray-800 mb-5 text-center leading-relaxed mt-2">
+                      <div 
+                        className="text-lg font-bold text-gray-800 mb-5 text-center leading-relaxed mt-2 line-clamp-2"
+                        title={`${q.segmentA} __ ${q.segmentB}${q.segmentC ? ` __ ${q.segmentC}` : ''}`}
+                      >
                         {q.segmentA} <span className="inline-block w-12 border-b-2 border-gray-400 mx-1 align-middle"></span> {q.segmentB} {q.segmentC && <><span className="inline-block w-12 border-b-2 border-gray-400 mx-1 align-middle"></span> {q.segmentC}</>}
                       </div>
                       <div className="flex gap-2">
-                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium">{q.segmentA || '第一段內容'}</div>
-                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium">{q.segmentB || '第二段內容'}</div>
-                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium">{q.segmentC || '第三段內容(可不填)'}</div>
+                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentA || '第一段內容'}>{q.segmentA || '第一段內容'}</div>
+                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentB || '第二段內容'}>{q.segmentB || '第二段內容'}</div>
+                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentC || '第三段內容(可不填)'}>{q.segmentC || '第三段內容(可不填)'}</div>
                       </div>
                       <button 
                         onClick={() => deleteQuestion(q)}
@@ -717,13 +748,24 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
               {filteredQuestions.length === 0 && (
                 <div className="text-center text-gray-500 py-8 font-medium">找不到符合的題目卡</div>
               )}
-              {page * itemsPerPage < filteredQuestions.length && (
-                <div className="flex justify-center mt-4">
+              {totalQuestionPages > 1 && (
+                <div className="flex justify-center items-center gap-4 mt-4">
                   <button 
-                    onClick={() => setPage(p => p + 1)}
-                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-6 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-4 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    載入更多
+                    上一頁
+                  </button>
+                  <span className="text-gray-600 font-bold">
+                    {page} / {totalQuestionPages}
+                  </span>
+                  <button 
+                    onClick={() => setPage(p => Math.min(totalQuestionPages, p + 1))}
+                    disabled={page === totalQuestionPages}
+                    className="bg-white text-[#28a89b] border-2 border-[#28a89b] px-4 py-2 rounded-full font-bold hover:bg-[#e8efef] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    下一頁
                   </button>
                 </div>
               )}

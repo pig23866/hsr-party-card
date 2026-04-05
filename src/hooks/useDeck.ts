@@ -18,17 +18,36 @@ export function useDeck() {
   const [deck, setDeck] = useState<Deck>({ answers: [], questions: [] });
   const [aiAnswers, setAiAnswers] = useState<string[]>([]);
   const [aiQuestions, setAiQuestions] = useState<Question[]>([]);
+  const [storageUsage, setStorageUsage] = useState({ usage: 0, limit: 5 * 1024 * 1024, ratio: 0 });
+
+  const updateStorageUsage = useCallback(() => {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key) || '';
+        total += key.length + value.length;
+      }
+    }
+    const usageBytes = total * 2;
+    const limitBytes = 5 * 1024 * 1024; // 5MB limit
+    const ratio = usageBytes / limitBytes;
+    
+    setStorageUsage({ usage: usageBytes, limit: limitBytes, ratio });
+    return ratio;
+  }, []);
 
   const safeSetItem = useCallback((key: string, value: string) => {
     try {
       localStorage.setItem(key, value);
+      updateStorageUsage();
       return true;
     } catch (e) {
       console.error('Storage quota exceeded', e);
       alert('儲存空間已滿！請刪除一些卡牌或匯出後再試。');
       return false;
     }
-  }, []);
+  }, [updateStorageUsage]);
 
   const getStorageKey = useCallback((key: string, deckId: string = activeDeckId) => {
     return `deck_${deckId}_${key}`;
@@ -202,6 +221,15 @@ export function useDeck() {
   };
 
   const addAnswer = (ans: string, isAiGenerated: boolean = false) => {
+    const ratio = updateStorageUsage();
+    if (ratio > 0.95) {
+      alert('警告：儲存空間即將額滿！請考慮匯出或刪除部分卡牌，以免無法繼續新增。');
+    }
+    if (ratio > 0.99) {
+      alert('儲存空間已滿！無法新增卡牌。');
+      return false;
+    }
+
     const trimmed = ans.trim();
     if (deck.answers.some(a => a.toLowerCase() === trimmed.toLowerCase())) return false;
     const stored = JSON.parse(localStorage.getItem(getStorageKey('custom_answers')) || '[]');
@@ -248,6 +276,15 @@ export function useDeck() {
   };
 
   const addQuestion = (q: Question, isAiGenerated: boolean = false) => {
+    const ratio = updateStorageUsage();
+    if (ratio > 0.95) {
+      alert('警告：儲存空間即將額滿！請考慮匯出或刪除部分卡牌，以免無法繼續新增。');
+    }
+    if (ratio > 0.99) {
+      alert('儲存空間已滿！無法新增卡牌。');
+      return false;
+    }
+
     const segA = q.segmentA.trim();
     const segB = q.segmentB.trim();
     const segC = q.segmentC.trim();
@@ -415,6 +452,7 @@ export function useDeck() {
     deck, 
     decks,
     activeDeck,
+    storageUsage,
     aiAnswers, 
     aiQuestions, 
     addAnswer, 
