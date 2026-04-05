@@ -60,22 +60,53 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
     }
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        const result = bulkImport(json);
-        processImportResult(result);
-      } catch (error) {
-        showStatus('error', 'JSON 格式錯誤，匯入失敗！');
-      }
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-    reader.readAsText(file);
+    const allAnswers: string[] = [];
+    const allQuestions: any[] = [];
+    let hasError = false;
+
+    const readPromises = Array.from(files).map(file => {
+      return new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const json = JSON.parse(event.target?.result as string);
+            if (json.answers && Array.isArray(json.answers)) {
+              allAnswers.push(...json.answers);
+            }
+            if (json.questions && Array.isArray(json.questions)) {
+              allQuestions.push(...json.questions);
+            }
+          } catch (error) {
+            hasError = true;
+          }
+          resolve();
+        };
+        reader.onerror = () => {
+          hasError = true;
+          resolve();
+        };
+        reader.readAsText(file);
+      });
+    });
+
+    await Promise.all(readPromises);
+
+    if (hasError) {
+      showStatus('error', '部分檔案格式錯誤，僅匯入成功解析的內容！');
+    }
+
+    if (allAnswers.length > 0 || allQuestions.length > 0) {
+      const result = bulkImport({ answers: allAnswers, questions: allQuestions });
+      processImportResult(result);
+    } else if (!hasError) {
+      showStatus('info', '找不到可匯入的卡牌資料！');
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleClipboardImport = () => {
@@ -429,6 +460,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
           <input 
             type="file" 
             accept=".json,.txt" 
+            multiple
             ref={fileInputRef} 
             onChange={handleImport} 
             className="hidden" 
