@@ -138,7 +138,7 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = numFiles > 1 ? `${activeDeck.name}-export-part${partNum}.txt` : `${activeDeck.name}-export.txt`;
+      a.download = numFiles > 1 ? `${activeDeck.name}${partNum}.txt` : `${activeDeck.name}.txt`;
       a.click();
       URL.revokeObjectURL(url);
     }
