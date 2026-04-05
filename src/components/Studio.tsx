@@ -149,12 +149,13 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
       const chunkQuestions = deck.questions.slice(i * maxQuestions, (i + 1) * maxQuestions);
       
       const partNum = String(i + 1).padStart(2, '0');
-      const labelName = numFiles > 1 ? `${activeDeck.name}_${partNum}` : activeDeck.name;
+      // 為了在遊戲內能區分，且保持擴充前後的一致性，標籤與檔名都固定加上序號
+      const labelName = `${activeDeck.name}_${partNum}`;
 
       const exportData = {
         mode: "general",
         label: labelName,
-        createdAt: Math.floor(Date.now() / 1000),
+        createdAt: 1773846255, // Fixed timestamp to ensure file hashes remain identical when content hasn't changed
         answers: chunkAnswers,
         questions: chunkQuestions,
         imageAnswers: [],
@@ -166,7 +167,8 @@ export function Studio({ deck, activeDeck, aiAnswers, aiQuestions, onBack, addAn
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = numFiles > 1 ? `${activeDeck.name}${partNum}.txt` : `${activeDeck.name}.txt`;
+      // Always append partNum to ensure filename consistency when expanding from 1 to multiple files
+      a.download = `${activeDeck.name}_${partNum}.txt`;
       a.click();
       URL.revokeObjectURL(url);
     }
