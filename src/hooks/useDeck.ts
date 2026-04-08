@@ -16,8 +16,6 @@ export function useDeck() {
   const [decks, setDecks] = useState<DeckMetadata[]>([]);
   const [activeDeckId, setActiveDeckId] = useState<string>('default');
   const [deck, setDeck] = useState<Deck>({ answers: [], questions: [] });
-  const [aiAnswers, setAiAnswers] = useState<string[]>([]);
-  const [aiQuestions, setAiQuestions] = useState<Question[]>([]);
   const [storageUsage, setStorageUsage] = useState({ usage: 0, limit: 5 * 1024 * 1024, ratio: 0 });
 
   const updateStorageUsage = useCallback(() => {
@@ -96,8 +94,6 @@ export function useDeck() {
     }
 
     setDeck({ answers: uniqueAnswers, questions: uniqueQuestions });
-    setAiAnswers(JSON.parse(localStorage.getItem(getStorageKey('ai_answers', deckId)) || '[]'));
-    setAiQuestions(JSON.parse(localStorage.getItem(getStorageKey('ai_questions', deckId)) || '[]'));
   }, [activeDeckId, getStorageKey]);
 
   useEffect(() => {
@@ -117,16 +113,12 @@ export function useDeck() {
         localStorage.setItem('deck_default_deleted_answers', localStorage.getItem('deleted_answers') || '[]');
         localStorage.setItem('deck_default_custom_questions', localStorage.getItem('custom_questions') || '[]');
         localStorage.setItem('deck_default_deleted_questions', localStorage.getItem('deleted_questions') || '[]');
-        localStorage.setItem('deck_default_ai_answers', localStorage.getItem('ai_answers') || '[]');
-        localStorage.setItem('deck_default_ai_questions', localStorage.getItem('ai_questions') || '[]');
         
         // Clean up old keys
         localStorage.removeItem('custom_answers');
         localStorage.removeItem('deleted_answers');
         localStorage.removeItem('custom_questions');
         localStorage.removeItem('deleted_questions');
-        localStorage.removeItem('ai_answers');
-        localStorage.removeItem('ai_questions');
       }
     } else {
       setDecks(storedDecks);
@@ -161,8 +153,6 @@ export function useDeck() {
     localStorage.removeItem(getStorageKey('deleted_answers', id));
     localStorage.removeItem(getStorageKey('custom_questions', id));
     localStorage.removeItem(getStorageKey('deleted_questions', id));
-    localStorage.removeItem(getStorageKey('ai_answers', id));
-    localStorage.removeItem(getStorageKey('ai_questions', id));
 
     if (activeDeckId === id) {
       switchDeck('default');
@@ -176,8 +166,6 @@ export function useDeck() {
     localStorage.removeItem(getStorageKey('deleted_answers', id));
     localStorage.removeItem(getStorageKey('custom_questions', id));
     localStorage.removeItem(getStorageKey('deleted_questions', id));
-    localStorage.removeItem(getStorageKey('ai_answers', id));
-    localStorage.removeItem(getStorageKey('ai_questions', id));
 
     // 確保要有一組可以遊玩的卡組 (Ensure there is a playable deck)
     if (id === 'default') {
@@ -199,8 +187,6 @@ export function useDeck() {
     localStorage.removeItem(getStorageKey('deleted_answers', id));
     localStorage.removeItem(getStorageKey('custom_questions', id));
     localStorage.removeItem(getStorageKey('deleted_questions', id));
-    localStorage.removeItem(getStorageKey('ai_answers', id));
-    localStorage.removeItem(getStorageKey('ai_questions', id));
 
     if (activeDeckId === id) {
       loadDeck(id);
@@ -220,7 +206,7 @@ export function useDeck() {
     setActiveDeckId(id);
   };
 
-  const addAnswer = (ans: string, isAiGenerated: boolean = false) => {
+  const addAnswer = (ans: string) => {
     const ratio = updateStorageUsage();
     if (ratio > 0.95) {
       alert('警告：儲存空間即將額滿！請考慮匯出或刪除部分卡牌，以免無法繼續新增。');
@@ -235,11 +221,6 @@ export function useDeck() {
     const stored = JSON.parse(localStorage.getItem(getStorageKey('custom_answers')) || '[]');
     safeSetItem(getStorageKey('custom_answers'), JSON.stringify([...stored, trimmed]));
     
-    if (isAiGenerated) {
-      const aiStored = JSON.parse(localStorage.getItem(getStorageKey('ai_answers')) || '[]');
-      safeSetItem(getStorageKey('ai_answers'), JSON.stringify([...aiStored, trimmed]));
-    }
-
     const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_answers')) || '[]');
     const newDeleted = deleted.filter((a: string) => a.toLowerCase() !== trimmed.toLowerCase());
     safeSetItem(getStorageKey('deleted_answers'), JSON.stringify(newDeleted));
@@ -264,18 +245,39 @@ export function useDeck() {
 
   const editAnswer = (oldAns: string, newAns: string) => {
     const trimmedNew = newAns.trim();
-    if (oldAns.toLowerCase() === trimmedNew.toLowerCase()) {
-      deleteAnswer(oldAns);
-      addAnswer(trimmedNew);
-      return true;
+    if (!trimmedNew) return false;
+    
+    const isSame = oldAns.toLowerCase() === trimmedNew.toLowerCase();
+    
+    // Check if new name already exists in the current deck (excluding the one being edited)
+    if (!isSame && deck.answers.some(a => a.toLowerCase() === trimmedNew.toLowerCase())) {
+      return false;
     }
-    if (deck.answers.some(a => a.toLowerCase() === trimmedNew.toLowerCase())) return false;
-    deleteAnswer(oldAns);
-    addAnswer(trimmedNew);
+
+    const custom = JSON.parse(localStorage.getItem(getStorageKey('custom_answers')) || '[]');
+    const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_answers')) || '[]');
+    
+    let nextCustom = custom.filter((a: string) => a.toLowerCase() !== oldAns.toLowerCase());
+    let nextDeleted = deleted;
+    
+    const wasCustom = custom.length !== nextCustom.length;
+    if (!wasCustom) {
+      if (!nextDeleted.some((a: string) => a.toLowerCase() === oldAns.toLowerCase())) {
+        nextDeleted.push(oldAns);
+      }
+    }
+    
+    nextCustom.push(trimmedNew);
+    nextDeleted = nextDeleted.filter((a: string) => a.toLowerCase() !== trimmedNew.toLowerCase());
+    
+    safeSetItem(getStorageKey('custom_answers'), JSON.stringify(nextCustom));
+    safeSetItem(getStorageKey('deleted_answers'), JSON.stringify(nextDeleted));
+    
+    loadDeck();
     return true;
   };
 
-  const addQuestion = (q: Question, isAiGenerated: boolean = false) => {
+  const addQuestion = (q: Question) => {
     const ratio = updateStorageUsage();
     if (ratio > 0.95) {
       alert('警告：儲存空間即將額滿！請考慮匯出或刪除部分卡牌，以免無法繼續新增。');
@@ -298,11 +300,6 @@ export function useDeck() {
     const newQ = { segmentA: segA, segmentB: segB, segmentC: segC };
     const stored = JSON.parse(localStorage.getItem(getStorageKey('custom_questions')) || '[]');
     safeSetItem(getStorageKey('custom_questions'), JSON.stringify([...stored, newQ]));
-
-    if (isAiGenerated) {
-      const aiStored = JSON.parse(localStorage.getItem(getStorageKey('ai_questions')) || '[]');
-      safeSetItem(getStorageKey('ai_questions'), JSON.stringify([...aiStored, newQ]));
-    }
 
     const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_questions')) || '[]');
     const newDeleted = deleted.filter((dq: Question) => !(
@@ -348,25 +345,52 @@ export function useDeck() {
     const segB = newQ.segmentB.trim();
     const segC = newQ.segmentC.trim();
     
-    if (
-      oldQ.segmentA.toLowerCase() === segA.toLowerCase() && 
-      oldQ.segmentB.toLowerCase() === segB.toLowerCase() && 
-      oldQ.segmentC.toLowerCase() === segC.toLowerCase()
-    ) {
-      deleteQuestion(oldQ);
-      addQuestion({ segmentA: segA, segmentB: segB, segmentC: segC });
-      return true;
-    }
-    
-    const exists = deck.questions.some(t => 
+    const isSame = oldQ.segmentA.toLowerCase() === segA.toLowerCase() && 
+                   oldQ.segmentB.toLowerCase() === segB.toLowerCase() && 
+                   oldQ.segmentC.toLowerCase() === segC.toLowerCase();
+
+    if (!isSame && deck.questions.some(t => 
       t.segmentA.toLowerCase() === segA.toLowerCase() && 
       t.segmentB.toLowerCase() === segB.toLowerCase() && 
       t.segmentC.toLowerCase() === segC.toLowerCase()
-    );
-    if (exists) return false;
+    )) {
+      return false;
+    }
+
+    const custom = JSON.parse(localStorage.getItem(getStorageKey('custom_questions')) || '[]');
+    const deleted = JSON.parse(localStorage.getItem(getStorageKey('deleted_questions')) || '[]');
     
-    deleteQuestion(oldQ);
-    addQuestion({ segmentA: segA, segmentB: segB, segmentC: segC });
+    let nextCustom = custom.filter((cq: Question) => !(
+      cq.segmentA.toLowerCase() === oldQ.segmentA.toLowerCase() && 
+      cq.segmentB.toLowerCase() === oldQ.segmentB.toLowerCase() && 
+      cq.segmentC.toLowerCase() === oldQ.segmentC.toLowerCase()
+    ));
+    let nextDeleted = deleted;
+    
+    const wasCustom = custom.length !== nextCustom.length;
+    if (!wasCustom) {
+      const alreadyDeleted = nextDeleted.some((dq: Question) => 
+        dq.segmentA.toLowerCase() === oldQ.segmentA.toLowerCase() && 
+        dq.segmentB.toLowerCase() === oldQ.segmentB.toLowerCase() && 
+        dq.segmentC.toLowerCase() === oldQ.segmentC.toLowerCase()
+      );
+      if (!alreadyDeleted) {
+        nextDeleted.push(oldQ);
+      }
+    }
+    
+    const finalNewQ = { segmentA: segA, segmentB: segB, segmentC: segC };
+    nextCustom.push(finalNewQ);
+    nextDeleted = nextDeleted.filter((dq: Question) => !(
+      dq.segmentA.toLowerCase() === segA.toLowerCase() && 
+      dq.segmentB.toLowerCase() === segB.toLowerCase() && 
+      dq.segmentC.toLowerCase() === segC.toLowerCase()
+    ));
+    
+    safeSetItem(getStorageKey('custom_questions'), JSON.stringify(nextCustom));
+    safeSetItem(getStorageKey('deleted_questions'), JSON.stringify(nextDeleted));
+
+    loadDeck();
     return true;
   };
 
@@ -453,8 +477,6 @@ export function useDeck() {
     decks,
     activeDeck,
     storageUsage,
-    aiAnswers, 
-    aiQuestions, 
     addAnswer, 
     deleteAnswer, 
     editAnswer, 

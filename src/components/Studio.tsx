@@ -1,34 +1,30 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Sparkles, Plus, Check, AlertCircle, X, Search, Edit2, Save, Download, Upload, ClipboardPaste, FileCode, FileText, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, Check, AlertCircle, X, Search, Edit2, Save, Download, Upload, ClipboardPaste, FileCode, FileText, RotateCcw, ChevronRight } from 'lucide-react';
 import { Question } from '../data/packs';
 import { Deck, DeckMetadata } from '../hooks/useDeck';
-import { GoogleGenAI, Type } from '@google/genai';
 
 interface StudioProps {
   deck: Deck;
   activeDeck: DeckMetadata;
   storageUsage: { usage: number, limit: number, ratio: number };
-  aiAnswers: string[];
-  aiQuestions: Question[];
   onBack: () => void;
-  addAnswer: (ans: string, isAiGenerated?: boolean) => boolean;
+  addAnswer: (ans: string) => boolean;
   deleteAnswer: (ans: string) => void;
   editAnswer: (oldAns: string, newAns: string) => boolean;
-  addQuestion: (q: Question, isAiGenerated?: boolean) => boolean;
+  addQuestion: (q: Question) => boolean;
   deleteQuestion: (q: Question) => void;
   editQuestion: (oldQ: Question, newQ: Question) => boolean;
   bulkImport: (data: any) => { addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] };
   resetDeckToDefault: (id?: string) => void;
 }
 
-export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport, resetDeckToDefault }: StudioProps) {
+export function Studio({ deck, activeDeck, storageUsage, onBack, addAnswer, deleteAnswer, editAnswer, addQuestion, deleteQuestion, editQuestion, bulkImport, resetDeckToDefault }: StudioProps) {
   const [tab, setTab] = useState<'answer' | 'question'>('answer');
   const [answerInput, setAnswerInput] = useState('');
   const [smartQuestionInput, setSmartQuestionInput] = useState('');
   
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info', msg: string } | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -38,13 +34,20 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [editSmartInput, setEditSmartInput] = useState('');
 
-  const [aiCount, setAiCount] = useState(5);
-
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [importText, setImportText] = useState('');
   const [exportConfirmConfig, setExportConfirmConfig] = useState<{type: 'txt-select' | 'html', numFiles?: number, message?: string} | null>(null);
   const [importReport, setImportReport] = useState<{ addedAnswers: number, addedQuestions: number, duplicateAnswers: string[], duplicateQuestions: Question[] } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    cancelText?: string;
+    isDanger?: boolean;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -201,10 +204,7 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
     .section-title { border-bottom: 2px solid #28a89b; padding-bottom: 10px; margin-bottom: 20px; color: #476a6f; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; }
     .card { background: white; border: 2px solid #d1dfdf; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; font-weight: bold; position: relative; }
-    .card.ai { border-color: #fde047; background: linear-gradient(135deg, #fff, #fef9c3); }
     .answer-card { background-color: #28a89b; color: white; border-color: #1e8278; }
-    .answer-card.ai { background: linear-gradient(135deg, #28a89b, #1e8278); border-color: #fde047; }
-    .ai-badge { display: inline-block; font-size: 0.8em; background: #fde047; color: #854d0e; padding: 2px 8px; border-radius: 10px; margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -213,29 +213,22 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
   <div class="section">
     <h2 class="section-title">題目卡 (${deck.questions.length} 張)</h2>
     <div class="grid">
-      ${deck.questions.map(q => {
-        const isAi = aiQuestions.some(aq => aq.segmentA === q.segmentA && aq.segmentB === q.segmentB && aq.segmentC === q.segmentC);
-        return `
-        <div class="card ${isAi ? 'ai' : ''}">
-          ${isAi ? '<div class="ai-badge">✨ AI 生成</div>' : ''}
+      ${deck.questions.map(q => `
+        <div class="card">
           <div>${q.segmentA} _____ ${q.segmentB} ${q.segmentC ? '_____ ' + q.segmentC : ''}</div>
         </div>
-        `;
-      }).join('')}
+      `).join('')}
     </div>
   </div>
 
   <div class="section">
     <h2 class="section-title">答案卡 (${deck.answers.length} 張)</h2>
     <div class="grid">
-      ${deck.answers.map(ans => {
-        const isAi = aiAnswers.some(a => a === ans);
-        return `
-        <div class="card answer-card ${isAi ? 'ai' : ''}">
-          ${isAi ? '✨ ' : ''}${ans}
+      ${deck.answers.map(ans => `
+        <div class="card answer-card">
+          ${ans}
         </div>
-        `;
-      }).join('')}
+      `).join('')}
     </div>
   </div>
 </body>
@@ -250,17 +243,28 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
     URL.revokeObjectURL(url);
     showStatus('success', '卡牌庫已匯出為 HTML！');
     setExportConfirmConfig(null);
+    setShowExportOptions(false);
   };
 
   const handleAddAnswer = () => {
     if (!answerInput.trim()) return;
-    const success = addAnswer(answerInput.trim());
-    if (success) {
-      showStatus('success', '答案卡新增成功！');
-      setAnswerInput('');
-    } else {
-      showStatus('error', '此答案卡已存在！');
-    }
+    
+    setConfirmModal({
+      title: '新增答案卡',
+      message: `確定要新增「${answerInput.trim()}」這張答案卡嗎？`,
+      confirmText: '確定新增',
+      cancelText: '取消',
+      onConfirm: () => {
+        const success = addAnswer(answerInput.trim());
+        if (success) {
+          showStatus('success', '答案卡新增成功！');
+          setAnswerInput('');
+        } else {
+          showStatus('error', '此答案卡已存在！');
+        }
+        setConfirmModal(null);
+      }
+    });
   };
 
   const parseQuestion = (text: string): Question | null => {
@@ -280,70 +284,23 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
       showStatus('error', '題目格式錯誤！請包含 1~2 個空格標記 (例如：OO, {}, [])');
       return;
     }
-    const success = addQuestion(parsed);
-    if (success) {
-      showStatus('success', '題目卡新增成功！');
-      setSmartQuestionInput('');
-    } else {
-      showStatus('error', '此題目卡已存在！');
-    }
-  };
 
-  const generateWithAI = async () => {
-    setIsGenerating(true);
-    setStatus({ type: 'info', msg: 'AI 正在腦力激盪中...' });
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      if (tab === 'answer') {
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `你是一個《崩壞：星穹鐵道》的資深玩家與迷因大師。請為一個填空派對遊戲生成 ${aiCount} 個好笑、有梗的「答案卡」。答案可以是角色名稱、招式、遊戲迷因、社群梗等。請以 JSON 陣列格式回傳字串。`,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
-          }
-        });
-        const newAnswers: string[] = JSON.parse(response.text || '[]');
-        let addedCount = 0;
-        newAnswers.forEach(ans => {
-          if (addAnswer(ans, true)) addedCount++;
-        });
-        showStatus('success', `AI 生成完畢！成功新增 ${addedCount} 張不重複的答案卡。`);
-      } else {
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `你是一個《崩壞：星穹鐵道》的資深玩家與迷因大師。請為一個填空派對遊戲生成 ${aiCount} 個好笑、有梗的「題目卡」。題目卡會有 1 到 2 個空格。請將句子拆分成 segmentA, segmentB, segmentC。例如：「幫幫我，[空格]先生！」 -> segmentA: '幫幫我，', segmentB: '先生！', segmentC: ''。如果有兩個空格：「[空格]，便是[空格]。」 -> segmentA: '', segmentB: '，便是', segmentC: '。'。請以 JSON 陣列格式回傳。`,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  segmentA: { type: Type.STRING },
-                  segmentB: { type: Type.STRING },
-                  segmentC: { type: Type.STRING }
-                }
-              }
-            }
-          }
-        });
-        const newQuestions: Question[] = JSON.parse(response.text || '[]');
-        let addedCount = 0;
-        newQuestions.forEach(q => {
-          if (addQuestion({ segmentA: q.segmentA || '', segmentB: q.segmentB || '', segmentC: q.segmentC || '' }, true)) addedCount++;
-        });
-        showStatus('success', `AI 生成完畢！成功新增 ${addedCount} 張不重複的題目卡。`);
+    setConfirmModal({
+      title: '新增題目卡',
+      message: `確定要新增這張題目卡嗎？`,
+      confirmText: '確定新增',
+      cancelText: '取消',
+      onConfirm: () => {
+        const success = addQuestion(parsed);
+        if (success) {
+          showStatus('success', '題目卡新增成功！');
+          setSmartQuestionInput('');
+        } else {
+          showStatus('error', '此題目卡已存在！');
+        }
+        setConfirmModal(null);
       }
-    } catch (error) {
-      console.error(error);
-      showStatus('error', 'AI 生成失敗，請檢查 API Key 或稍後再試。');
-    }
-    setIsGenerating(false);
+    });
   };
 
   const startEditAnswer = (ans: string) => {
@@ -407,10 +364,6 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
   const totalAnswerPages = Math.ceil(filteredAnswers.length / itemsPerPage);
   const totalQuestionPages = Math.ceil(filteredQuestions.length / itemsPerPage);
 
-  // Optimize AI lookups
-  const aiAnswersSet = React.useMemo(() => new Set(aiAnswers.map(a => a.toLowerCase())), [aiAnswers]);
-  const aiQuestionsSet = React.useMemo(() => new Set(aiQuestions.map(q => `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`)), [aiQuestions]);
-
   const totalAnswers = deck.answers.length;
   const totalQuestions = deck.questions.length;
   const mobileFilesCount = Math.max(Math.ceil(totalAnswers / 200), Math.ceil(totalQuestions / 100), 1);
@@ -424,7 +377,6 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div className="font-bold text-lg tracking-wider flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-yellow-300" />
             {activeDeck.name}
           </div>
         </div>
@@ -451,21 +403,12 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
           </button>
           <div className="w-px h-4 bg-white/30 hidden sm:block"></div>
           <button 
-            onClick={triggerExportHtml}
+            onClick={() => setShowExportOptions(true)}
             className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
-            title="匯出為 HTML"
-          >
-            <FileCode className="w-5 h-5" />
-            <span className="hidden sm:inline">匯出 HTML</span>
-          </button>
-          <div className="w-px h-4 bg-white/30 hidden sm:block"></div>
-          <button 
-            onClick={triggerExportTxt}
-            className="flex items-center gap-1 hover:text-yellow-300 transition-colors text-sm font-bold"
-            title="匯出為 TXT"
+            title="匯出卡牌"
           >
             <Download className="w-5 h-5" />
-            <span className="hidden sm:inline">匯出 TXT</span>
+            <span className="hidden sm:inline">匯出卡牌</span>
           </button>
           <div className="w-px h-4 bg-white/30 hidden sm:block"></div>
           <button 
@@ -565,28 +508,6 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
               </button>
             </div>
           )}
-
-          <div className="mt-4 pt-4 border-t-2 border-[#d1dfdf]">
-            <div className="flex gap-2 mb-3 items-center">
-              <label className="text-sm font-bold text-gray-600 whitespace-nowrap">生成數量：</label>
-              <input 
-                type="number" 
-                min="1" 
-                max="20" 
-                value={aiCount} 
-                onChange={(e) => setAiCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
-                className="w-20 bg-white border-2 border-[#d1dfdf] rounded-lg px-3 py-1.5 text-gray-800 focus:outline-none focus:border-[#28a89b] font-medium text-center"
-              />
-            </div>
-            <button
-              onClick={generateWithAI}
-              disabled={isGenerating}
-              className="w-full bg-gradient-to-r from-[#28a89b]/10 to-[#fde047]/20 border-2 border-[#28a89b]/30 text-[#28a89b] font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-[#28a89b]/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Sparkles className="w-5 h-5" />
-              {isGenerating ? 'AI 靈感湧現中...' : `讓 AI 幫我想${tab === 'answer' ? '答案' : '題目'}`}
-            </button>
-          </div>
         </div>
 
         {/* Search */}
@@ -609,41 +530,35 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
           {tab === 'answer' ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 pt-2">
               {paginatedAnswers.map((ans, idx) => {
-                const isAi = aiAnswersSet.has(ans.toLowerCase());
                 return (
                 <div key={idx} className="relative">
-                  {editingAnswer === ans ? (
-                    <div className="bg-white border-2 border-[#28a89b] rounded-2xl p-1 flex items-center shadow-md">
-                      <input 
-                        type="text"
-                        value={editAnswerInput}
-                        onChange={(e) => setEditAnswerInput(e.target.value)}
-                        className="flex-1 bg-transparent px-3 py-1 text-gray-800 outline-none font-bold min-w-0 text-center"
-                        autoFocus
-                      />
-                      <button onClick={() => saveEditAnswer(ans)} className="p-1.5 text-green-500 hover:bg-green-50 rounded-full shrink-0"><Save className="w-4 h-4" /></button>
-                      <button onClick={() => setEditingAnswer(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full shrink-0"><X className="w-4 h-4" /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className={`border-[3px] rounded-2xl py-3 px-4 text-center text-white font-bold shadow-md break-words text-sm md:text-base ${isAi ? 'bg-gradient-to-r from-[#28a89b] to-[#1e8278] border-yellow-300' : 'bg-[#28a89b] border-[#fde047]'}`}>
-                        {isAi && <Sparkles className="w-4 h-4 inline-block mr-1 text-yellow-300 -mt-1 shrink-0" />}
-                        {ans}
-                      </div>
-                      <button 
-                        onClick={() => deleteAnswer(ans)}
-                        className="absolute -bottom-2 -left-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-red-500 text-red-500 hover:bg-red-50 z-10"
-                      >
-                        <X className="w-4 h-4" strokeWidth={3} />
-                      </button>
-                      <button 
-                        onClick={() => startEditAnswer(ans)}
-                        className="absolute -top-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-blue-500 text-blue-500 hover:bg-blue-50 z-10"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" strokeWidth={2.5} />
-                      </button>
-                    </>
-                  )}
+                  <div className="border-[3px] rounded-2xl py-3 px-4 text-center text-white font-bold shadow-md break-words text-sm md:text-base bg-[#28a89b] border-[#fde047]">
+                    {ans}
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setConfirmModal({
+                        title: '刪除答案卡',
+                        message: `確定要刪除「${ans}」這張答案卡嗎？`,
+                        isDanger: true,
+                        confirmText: '確定刪除',
+                        cancelText: '取消',
+                        onConfirm: () => {
+                          deleteAnswer(ans);
+                          setConfirmModal(null);
+                        }
+                      });
+                    }}
+                    className="absolute -bottom-2 -left-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-red-500 text-red-500 hover:bg-red-50 z-10"
+                  >
+                    <X className="w-4 h-4" strokeWidth={3} />
+                  </button>
+                  <button 
+                    onClick={() => startEditAnswer(ans)}
+                    className="absolute -top-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-blue-500 text-blue-500 hover:bg-blue-50 z-10"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" strokeWidth={2.5} />
+                  </button>
                 </div>
                 );
               })}
@@ -675,73 +590,43 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
           ) : (
             <div className="flex flex-col gap-6 pt-2">
               {paginatedQuestions.map((q, idx) => {
-                const isAi = aiQuestionsSet.has(`${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`);
                 return (
-                <div key={idx} className={`relative border-2 rounded-2xl p-5 shadow-md ${isAi ? 'bg-gradient-to-br from-[#f4f7f7] to-[#e6f0f0] border-yellow-400' : 'bg-[#f4f7f7] border-[#476a6f]'}`}>
-                  {editingQuestion === q ? (
-                    <div className="flex flex-col gap-3">
-                      <textarea 
-                        value={editSmartInput} 
-                        onChange={(e) => setEditSmartInput(e.target.value)} 
-                        className="bg-white border-2 border-[#d1dfdf] rounded-xl px-3 py-2 text-gray-800 outline-none font-medium h-24 resize-none" 
-                        placeholder="輸入題目，使用 OO 或 {} 代表空格" 
-                      />
-                      {editSmartInput.trim() && (
-                        <div className="text-sm text-gray-500 bg-white/50 p-2 rounded-xl border border-[#d1dfdf]">
-                          {parseQuestion(editSmartInput) ? (
-                            <div className="flex flex-wrap items-center gap-1 text-gray-800 font-bold text-xs">
-                              {parseQuestion(editSmartInput)?.segmentA}
-                              <span className="inline-block w-6 border-b-2 border-gray-400 mx-1"></span>
-                              {parseQuestion(editSmartInput)?.segmentB}
-                              {parseQuestion(editSmartInput)?.segmentC && (
-                                <>
-                                  <span className="inline-block w-6 border-b-2 border-gray-400 mx-1"></span>
-                                  {parseQuestion(editSmartInput)?.segmentC}
-                                </>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-red-500 font-bold text-xs">格式錯誤：請確保包含 1 到 2 個空格標記</div>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex justify-end gap-2 mt-2">
-                        <button onClick={() => setEditingQuestion(null)} className="px-4 py-2 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition-colors">取消</button>
-                        <button onClick={() => saveEditQuestion(q)} disabled={!parseQuestion(editSmartInput)} className="px-4 py-2 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Save className="w-4 h-4" /> 儲存</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {isAi && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                          <Sparkles className="w-3 h-3" /> AI 生成
-                        </div>
-                      )}
-                      <div 
-                        className="text-lg font-bold text-gray-800 mb-5 text-center leading-relaxed mt-2 line-clamp-2"
-                        title={`${q.segmentA} __ ${q.segmentB}${q.segmentC ? ` __ ${q.segmentC}` : ''}`}
-                      >
-                        {q.segmentA} <span className="inline-block w-12 border-b-2 border-gray-400 mx-1 align-middle"></span> {q.segmentB} {q.segmentC && <><span className="inline-block w-12 border-b-2 border-gray-400 mx-1 align-middle"></span> {q.segmentC}</>}
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentA || '第一段內容'}>{q.segmentA || '第一段內容'}</div>
-                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentB || '第二段內容'}>{q.segmentB || '第二段內容'}</div>
-                        <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentC || '第三段內容(可不填)'}>{q.segmentC || '第三段內容(可不填)'}</div>
-                      </div>
-                      <button 
-                        onClick={() => deleteQuestion(q)}
-                        className="absolute -bottom-3 -left-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-red-500 text-red-500 hover:bg-red-50 z-10"
-                      >
-                        <X className="w-5 h-5" strokeWidth={3} />
-                      </button>
-                      <button 
-                        onClick={() => startEditQuestion(q)}
-                        className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-blue-500 text-blue-500 hover:bg-blue-50 z-10"
-                      >
-                        <Edit2 className="w-4 h-4" strokeWidth={2.5} />
-                      </button>
-                    </>
-                  )}
+                <div key={idx} className="relative border-2 rounded-2xl p-5 shadow-md bg-[#f4f7f7] border-[#476a6f]">
+                  <div 
+                    className="text-lg font-bold text-gray-800 mb-5 text-center leading-relaxed mt-2 line-clamp-2"
+                    title={`${q.segmentA} __ ${q.segmentB}${q.segmentC ? ` __ ${q.segmentC}` : ''}`}
+                  >
+                    {q.segmentA} <span className="inline-block w-12 border-b-2 border-gray-400 mx-1 align-middle"></span> {q.segmentB} {q.segmentC && <><span className="inline-block w-12 border-b-2 border-gray-400 mx-1 align-middle"></span> {q.segmentC}</>}
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentA || '第一段內容'}>{q.segmentA || '第一段內容'}</div>
+                    <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentB || '第二段內容'}>{q.segmentB || '第二段內容'}</div>
+                    <div className="flex-1 bg-[#d1dfdf] rounded-full px-2 py-1.5 text-xs text-gray-600 text-center truncate font-medium" title={q.segmentC || '第三段內容(可不填)'}>{q.segmentC || '第三段內容(可不填)'}</div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setConfirmModal({
+                        title: '刪除題目卡',
+                        message: `確定要刪除這張題目卡嗎？`,
+                        isDanger: true,
+                        confirmText: '確定刪除',
+                        cancelText: '取消',
+                        onConfirm: () => {
+                          deleteQuestion(q);
+                          setConfirmModal(null);
+                        }
+                      });
+                    }}
+                    className="absolute -bottom-3 -left-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-red-500 text-red-500 hover:bg-red-50 z-10"
+                  >
+                    <X className="w-5 h-5" strokeWidth={3} />
+                  </button>
+                  <button 
+                    onClick={() => startEditQuestion(q)}
+                    className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-2 border-blue-500 text-blue-500 hover:bg-blue-50 z-10"
+                  >
+                    <Edit2 className="w-4 h-4" strokeWidth={2.5} />
+                  </button>
                 </div>
                 );
               })}
@@ -773,6 +658,94 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
           )}
         </div>
 
+        {/* Edit Modal */}
+        {(editingAnswer || editingQuestion) && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border-2 border-[#28a89b]"
+            >
+              <div className="flex items-center gap-3 text-[#28a89b] mb-4">
+                <Edit2 className="w-8 h-8" />
+                <h2 className="text-2xl font-black">編輯{editingAnswer ? '答案卡' : '題目卡'}</h2>
+              </div>
+              
+              {editingAnswer ? (
+                <div className="flex flex-col gap-4">
+                  <input 
+                    type="text"
+                    value={editAnswerInput}
+                    onChange={(e) => setEditAnswerInput(e.target.value)}
+                    className="w-full bg-gray-50 border-2 border-[#d1dfdf] rounded-2xl px-4 py-3 text-gray-800 outline-none font-bold focus:border-[#28a89b] transition-colors"
+                    autoFocus
+                  />
+                  <div className="flex gap-3 mt-2">
+                    <button 
+                      onClick={() => setEditingAnswer(null)}
+                      className="flex-1 py-3 font-black text-gray-500 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button 
+                      onClick={() => saveEditAnswer(editingAnswer)}
+                      disabled={!editAnswerInput.trim()}
+                      className="flex-1 py-3 font-black text-white bg-[#28a89b] rounded-2xl hover:bg-[#239287] transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      儲存修改
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <textarea 
+                    value={editSmartInput} 
+                    onChange={(e) => setEditSmartInput(e.target.value)} 
+                    className="w-full bg-gray-50 border-2 border-[#d1dfdf] rounded-2xl px-4 py-3 text-gray-800 outline-none font-medium h-32 resize-none focus:border-[#28a89b] transition-colors" 
+                    placeholder="輸入題目，使用 OO 或 {} 代表空格" 
+                    autoFocus
+                  />
+                  {editSmartInput.trim() && (
+                    <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-2xl border border-[#d1dfdf]">
+                      <div className="font-bold mb-1 text-[#476a6f]">預覽：</div>
+                      {parseQuestion(editSmartInput) ? (
+                        <div className="flex flex-wrap items-center gap-1 text-gray-800 font-bold">
+                          {parseQuestion(editSmartInput)?.segmentA}
+                          <span className="inline-block w-8 border-b-2 border-gray-400 mx-1"></span>
+                          {parseQuestion(editSmartInput)?.segmentB}
+                          {parseQuestion(editSmartInput)?.segmentC && (
+                            <>
+                              <span className="inline-block w-8 border-b-2 border-gray-400 mx-1"></span>
+                              {parseQuestion(editSmartInput)?.segmentC}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-red-500 font-bold">格式錯誤：請確保包含 1 到 2 個空格標記</div>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex gap-3 mt-2">
+                    <button 
+                      onClick={() => setEditingQuestion(null)}
+                      className="flex-1 py-3 font-black text-gray-500 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button 
+                      onClick={() => editingQuestion && saveEditQuestion(editingQuestion)}
+                      disabled={!parseQuestion(editSmartInput)}
+                      className="flex-1 py-3 font-black text-white bg-[#28a89b] rounded-2xl hover:bg-[#239287] transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      儲存修改
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+
         {/* Status Toast */}
         {status && (
           <motion.div
@@ -787,6 +760,68 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
             {status.type === 'success' ? <Check className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
             {status.msg}
           </motion.div>
+        )}
+
+        {/* Export Options Modal */}
+        {showExportOptions && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border-2 border-[#28a89b]"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black text-[#28a89b] flex items-center gap-2">
+                  <Download className="w-6 h-6" />
+                  匯出選項
+                </h3>
+                <button onClick={() => setShowExportOptions(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={triggerExportHtml}
+                  className="flex items-center justify-between p-4 bg-gray-50 hover:bg-[#e8efef] rounded-2xl border-2 border-transparent hover:border-[#28a89b] transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      <FileCode className="w-6 h-6" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold text-gray-800">匯出 HTML 預覽</div>
+                      <div className="text-xs text-gray-500">合併所有卡牌，方便查看</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300" />
+                </button>
+
+                <button 
+                  onClick={triggerExportTxt}
+                  className="flex items-center justify-between p-4 bg-gray-50 hover:bg-[#e8efef] rounded-2xl border-2 border-transparent hover:border-[#28a89b] transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                      <Download className="w-6 h-6" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold text-gray-800">匯出 TXT 檔案</div>
+                      <div className="text-xs text-gray-500">純文字格式，適合備份</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300" />
+                </button>
+              </div>
+
+              <button 
+                onClick={() => setShowExportOptions(false)}
+                className="w-full mt-6 py-3 font-bold text-gray-500 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+            </motion.div>
+          </div>
         )}
 
         {/* Import Modal */}
@@ -974,6 +1009,39 @@ export function Studio({ deck, activeDeck, storageUsage, aiAnswers, aiQuestions,
                   className="px-8 py-2.5 font-bold bg-[#28a89b] text-white hover:bg-[#239287] rounded-xl transition-colors shadow-sm"
                 >
                   我知道了
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Generic Confirm Modal */}
+        {confirmModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className={`bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border-2 ${confirmModal.isDanger ? 'border-red-500' : 'border-[#28a89b]'}`}
+            >
+              <div className={`flex items-center gap-3 mb-4 ${confirmModal.isDanger ? 'text-red-500' : 'text-[#28a89b]'}`}>
+                {confirmModal.isDanger ? <AlertCircle className="w-8 h-8" /> : <Check className="w-8 h-8" />}
+                <h2 className="text-2xl font-black">{confirmModal.title}</h2>
+              </div>
+              <p className="text-gray-600 font-bold mb-6 leading-relaxed">
+                {confirmModal.message}
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setConfirmModal(null)}
+                  className="flex-1 py-3 font-black text-gray-500 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-colors"
+                >
+                  {confirmModal.cancelText || '取消'}
+                </button>
+                <button 
+                  onClick={confirmModal.onConfirm}
+                  className={`flex-1 py-3 font-black text-white rounded-2xl transition-colors shadow-lg ${confirmModal.isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-[#28a89b] hover:bg-[#239287] shadow-[#28a89b]/20'}`}
+                >
+                  {confirmModal.confirmText || '確定'}
                 </button>
               </div>
             </motion.div>

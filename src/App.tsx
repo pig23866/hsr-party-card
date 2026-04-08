@@ -13,8 +13,6 @@ export default function App() {
     decks,
     activeDeck,
     storageUsage,
-    aiAnswers, 
-    aiQuestions, 
     addAnswer, 
     deleteAnswer, 
     editAnswer, 
@@ -58,8 +56,6 @@ export default function App() {
           deck={deck}
           activeDeck={activeDeck}
           storageUsage={storageUsage}
-          aiAnswers={aiAnswers}
-          aiQuestions={aiQuestions}
           onBack={() => setView('home')}
           addAnswer={addAnswer}
           deleteAnswer={deleteAnswer}

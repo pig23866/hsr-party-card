@@ -21,8 +21,9 @@ interface HistoryRecord {
 export function Game({ deck, activeDeck, onBack }: GameProps) {
   const [question, setQuestion] = useState<Question | null>(null);
   const [hand, setHand] = useState<string[]>([]);
-  const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
+  const [selectedAnswers, setSelectedAnswers] = useState<(string | null)[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
+
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`deck_${activeDeck.id}_history`);
@@ -54,7 +55,8 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
     // Draw hand (11 cards)
     drawHand(11);
     
-    setSelectedAnswers([]);
+    const blanksCount = getBlanksCount(randomQuestion);
+    setSelectedAnswers(Array(blanksCount).fill(null));
     setIsSubmitted(false);
   };
 
@@ -62,8 +64,9 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
     if (deck.questions.length === 0) return;
     const randomQuestion = deck.questions[Math.floor(Math.random() * deck.questions.length)];
     setQuestion(randomQuestion);
-    setHand(prev => [...prev, ...selectedAnswers]);
-    setSelectedAnswers([]);
+    setHand(prev => [...prev, ...selectedAnswers.filter((a): a is string => a !== null)]);
+    const blanksCount = getBlanksCount(randomQuestion);
+    setSelectedAnswers(Array(blanksCount).fill(null));
   };
 
   const drawHand = (count: number) => {
@@ -82,10 +85,11 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
   const handleSelectAnswer = (answer: string, index: number) => {
     if (isSubmitted) return;
     
-    const blanksCount = question ? getBlanksCount(question) : 1;
-    
-    if (selectedAnswers.length < blanksCount) {
-      setSelectedAnswers([...selectedAnswers, answer]);
+    const firstEmptyIndex = selectedAnswers.findIndex(a => a === null);
+    if (firstEmptyIndex !== -1) {
+      const newSelected = [...selectedAnswers];
+      newSelected[firstEmptyIndex] = answer;
+      setSelectedAnswers(newSelected);
       // Remove from hand
       const newHand = [...hand];
       newHand.splice(index, 1);
@@ -97,12 +101,14 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
     if (isSubmitted) return;
     
     const answer = selectedAnswers[index];
-    const newSelected = [...selectedAnswers];
-    newSelected.splice(index, 1);
-    setSelectedAnswers(newSelected);
-    
-    // Add back to hand
-    setHand([...hand, answer]);
+    if (answer) {
+      const newSelected = [...selectedAnswers];
+      newSelected[index] = null;
+      setSelectedAnswers(newSelected);
+      
+      // Add back to hand
+      setHand([...hand, answer]);
+    }
   };
 
   const handleSubmit = () => {
@@ -111,7 +117,7 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
       setHistory(prev => [{
         id: Date.now().toString(),
         question,
-        answers: [...selectedAnswers],
+        answers: selectedAnswers.filter((a): a is string => a !== null),
         timestamp: Date.now()
       }, ...prev]);
     }
@@ -120,7 +126,7 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
   if (!question) return null;
 
   const blanksCount = getBlanksCount(question);
-  const canSubmit = selectedAnswers.length === blanksCount;
+  const canSubmit = selectedAnswers.every(a => a !== null) && selectedAnswers.length === blanksCount;
 
   const saveAsImage = async (id: string) => {
     const element = document.getElementById(`history-record-${id}`);
@@ -152,146 +158,139 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
           <ArrowLeft className="w-6 h-6" />
         </button>
         <div className="font-bold text-lg tracking-wider">{activeDeck.name}</div>
-        <button 
-          onClick={() => setShowHistory(true)}
-          className="flex items-center gap-2 hover:text-yellow-300 transition-colors"
-          title="歷史紀錄"
-        >
-          <History className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-2 hover:text-yellow-300 transition-colors"
+            title="歷史紀錄"
+          >
+            <History className="w-6 h-6" />
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col gap-8">
         
         {/* Question Area */}
-        <div className="bg-[#f4f7f7] border-2 border-[#476a6f] rounded-3xl p-6 md:p-10 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-2 bg-[#28a89b]"></div>
-          
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-[#476a6f]">題目卡</h3>
-            <button 
-              onClick={refreshQuestion}
-              disabled={isSubmitted || !question}
-              className="flex items-center gap-2 text-sm font-bold text-[#476a6f] hover:text-[#28a89b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-white/50 px-3 py-1.5 rounded-full"
-            >
-              <RefreshCw className="w-4 h-4" />
-              更換題目
-            </button>
-          </div>
-
-          {question ? (
-            <div className="text-2xl md:text-3xl font-bold leading-relaxed flex flex-wrap items-center gap-y-4 gap-x-2 text-gray-800 mt-2">
-              {question.segmentA && <span>{question.segmentA}</span>}
-              
-              {/* Blank 1 */}
-              <BlankSlot 
-                answer={selectedAnswers[0]} 
-                isActive={!isSubmitted && selectedAnswers.length === 0}
-                onClick={() => handleRemoveSelected(0)}
-                isSubmitted={isSubmitted}
-              />
-              
-              {question.segmentB && <span>{question.segmentB}</span>}
-              
-              {/* Blank 2 (if exists) */}
-              {blanksCount === 2 && (
-                <>
-                  <BlankSlot 
-                    answer={selectedAnswers[1]} 
-                    isActive={!isSubmitted && selectedAnswers.length === 1}
-                    onClick={() => handleRemoveSelected(1)}
-                    isSubmitted={isSubmitted}
-                  />
-                  {question.segmentC && <span>{question.segmentC}</span>}
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="text-xl font-bold text-gray-500 text-center py-8">
-              題庫為空，請先新增題目！
-            </div>
-          )}
-        </div>
-
-        {/* Action Area */}
-        <div className="flex justify-center">
-          <AnimatePresence mode="wait">
-            {!isSubmitted ? (
-              <motion.button
-                key="submit"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                disabled={!canSubmit}
-                onClick={handleSubmit}
-                className={`flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg transition-all shadow-md ${
-                  canSubmit 
-                    ? 'bg-[#28a89b] text-white hover:bg-[#239287] hover:scale-105 active:scale-95' 
-                    : 'bg-[#d1dfdf] text-gray-500 cursor-not-allowed'
-                }`}
+          <div className="bg-[#f4f7f7] border-2 border-[#476a6f] rounded-3xl p-6 md:p-10 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-[#28a89b]"></div>
+            
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-[#476a6f]">題目卡</h3>
+              <button 
+                onClick={refreshQuestion}
+                disabled={isSubmitted || !question}
+                className="flex items-center gap-2 text-sm font-bold text-[#476a6f] hover:text-[#28a89b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-white/50 px-3 py-1.5 rounded-full"
               >
-                <CheckCircle2 className="w-6 h-6" />
-                確認提交
-              </motion.button>
+                <RefreshCw className="w-4 h-4" />
+                更換題目
+              </button>
+            </div>
+
+            {question ? (
+              <div className="text-2xl md:text-3xl font-bold leading-relaxed flex flex-wrap items-center gap-y-4 gap-x-2 text-gray-800 mt-2">
+                {question.segmentA && <span>{question.segmentA}</span>}
+                
+                {/* Blank 1 */}
+                <BlankSlot 
+                  answer={selectedAnswers[0]} 
+                  isActive={!isSubmitted && selectedAnswers[0] === null}
+                  onClick={() => handleRemoveSelected(0)}
+                  isSubmitted={isSubmitted}
+                  index={0}
+                />
+                
+                {question.segmentB && <span>{question.segmentB}</span>}
+                
+                {/* Blank 2 (if exists) */}
+                {blanksCount === 2 && (
+                  <>
+                    <BlankSlot 
+                      answer={selectedAnswers[1]} 
+                      isActive={!isSubmitted && selectedAnswers[1] === null}
+                      onClick={() => handleRemoveSelected(1)}
+                      isSubmitted={isSubmitted}
+                      index={1}
+                    />
+                    {question.segmentC && <span>{question.segmentC}</span>}
+                  </>
+                )}
+              </div>
             ) : (
-              <motion.button
-                key="next"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                onClick={startNewRound}
-                className="flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg bg-[#fde047] text-gray-800 hover:bg-[#facc15] hover:scale-105 active:scale-95 shadow-md transition-all border-2 border-[#eab308]"
-              >
-                下一題
-                <ChevronRight className="w-6 h-6" />
-              </motion.button>
+              <div className="text-xl font-bold text-gray-500 text-center py-8">
+                題庫為空，請先新增題目！
+              </div>
             )}
-          </AnimatePresence>
-        </div>
-
-        {/* Hand Area */}
-        <div className="mt-auto pb-8">
-          <div className="flex items-center justify-between mb-4 px-2">
-            <h3 className="text-lg font-bold text-[#476a6f]">你的手牌</h3>
-            <button 
-              onClick={() => drawHand(11)}
-              disabled={isSubmitted}
-              className="flex items-center gap-2 text-sm font-bold text-[#476a6f] hover:text-[#28a89b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-white/50 px-3 py-1.5 rounded-full"
-            >
-              <RefreshCw className="w-4 h-4" />
-              重抽手牌
-            </button>
           </div>
-          
-          <div className="flex flex-wrap gap-3 justify-center">
-            <AnimatePresence>
-              {hand.map((answer, index) => (
+
+          {/* Action Area */}
+          <div className="flex justify-center">
+            <AnimatePresence mode="wait">
+              {!isSubmitted ? (
                 <motion.button
-                  key={`${answer}-${index}`}
-                  layout
-                  initial={{ opacity: 0, y: 20, scale: 0.8 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ 
-                    type: "spring", 
-                    stiffness: 500, 
-                    damping: 25,
-                    delay: index * 0.02 
-                  }}
-                  exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.1 } }}
-                  whileHover={!isSubmitted ? { y: -8, scale: 1.05, rotate: index % 2 === 0 ? 2 : -2 } : {}}
-                  whileTap={!isSubmitted ? { scale: 0.95 } : {}}
-                  onClick={() => handleSelectAnswer(answer, index)}
-                  disabled={isSubmitted || selectedAnswers.length >= blanksCount}
-                  className="bg-[#28a89b] border-[3px] border-[#fde047] text-white px-5 py-3 rounded-full font-bold text-base md:text-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  key="submit"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  disabled={!canSubmit}
+                  onClick={handleSubmit}
+                  className={`flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg transition-all shadow-md ${
+                    canSubmit 
+                      ? 'bg-[#28a89b] text-white hover:bg-[#239287] hover:scale-105 active:scale-95' 
+                      : 'bg-[#d1dfdf] text-gray-500 cursor-not-allowed'
+                  }`}
                 >
-                  {answer}
+                  <CheckCircle2 className="w-6 h-6" />
+                  確認提交
                 </motion.button>
-              ))}
+              ) : (
+                <motion.button
+                  key="next"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  onClick={startNewRound}
+                  className="flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg bg-[#fde047] text-gray-800 hover:bg-[#facc15] hover:scale-105 active:scale-95 shadow-md transition-all border-2 border-[#eab308]"
+                >
+                  下一題
+                  <ChevronRight className="w-6 h-6" />
+                </motion.button>
+              )}
             </AnimatePresence>
           </div>
-        </div>
 
-      </main>
+          {/* Hand Area */}
+          <div className="mt-auto pb-8">
+            <div className="flex items-center justify-between mb-4 px-2">
+              <h3 className="text-lg font-bold text-[#476a6f]">你的手牌</h3>
+              <button 
+                onClick={() => drawHand(11)}
+                disabled={isSubmitted}
+                className="flex items-center gap-2 text-sm font-bold text-[#476a6f] hover:text-[#28a89b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-white/50 px-3 py-1.5 rounded-full"
+              >
+                <RefreshCw className="w-4 h-4" />
+                重抽手牌
+              </button>
+            </div>
+            
+            <div className="flex flex-wrap gap-3 justify-center">
+              <AnimatePresence>
+                {hand.map((answer, index) => (
+                  <AnswerCard
+                    key={`${answer}-${index}`}
+                    answer={answer}
+                    index={index}
+                    isSubmitted={isSubmitted}
+                    blanksCount={blanksCount}
+                    selectedAnswersLength={selectedAnswers.filter(a => a !== null).length}
+                    onClick={() => handleSelectAnswer(answer, index)}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+
+        </main>
 
       {/* History Modal */}
       {showHistory && (
@@ -350,14 +349,40 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
   );
 }
 
-function BlankSlot({ answer, isActive, onClick, isSubmitted }: { answer?: string, isActive: boolean, onClick: () => void, isSubmitted: boolean }) {
+function AnswerCard({ answer, index, isSubmitted, blanksCount, selectedAnswersLength, onClick }: { answer: string, index: number, isSubmitted: boolean, blanksCount: number, selectedAnswersLength: number, onClick: () => void, key?: any }) {
+  return (
+    <div>
+      <motion.button
+        layout
+        initial={{ opacity: 0, y: 20, scale: 0.8 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ 
+          type: "spring", 
+          stiffness: 500, 
+          damping: 25,
+          delay: index * 0.02 
+        }}
+        exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.1 } }}
+        whileHover={!isSubmitted ? { y: -8, scale: 1.05, rotate: index % 2 === 0 ? 2 : -2 } : {}}
+        whileTap={!isSubmitted ? { scale: 0.95 } : {}}
+        onClick={onClick}
+        disabled={isSubmitted || selectedAnswersLength >= blanksCount}
+        className={`bg-[#28a89b] border-[3px] border-[#fde047] text-white px-5 py-3 rounded-3xl font-bold text-base md:text-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-normal break-words text-center max-w-full`}
+      >
+        {answer}
+      </motion.button>
+    </div>
+  );
+}
+
+function BlankSlot({ answer, isActive, onClick, isSubmitted, index }: { answer?: string | null, isActive: boolean, onClick: () => void, isSubmitted: boolean, index: number }) {
   return (
     <motion.div 
       layout
       transition={{ type: "spring", stiffness: 600, damping: 30 }}
       onClick={answer && !isSubmitted ? onClick : undefined}
       className={`
-        inline-flex items-center justify-center min-w-[120px] min-h-[48px] px-5 py-2 rounded-full border-[3px] transition-all overflow-hidden
+        inline-flex items-center justify-center min-w-[120px] min-h-[48px] px-5 py-2 rounded-3xl border-[3px] transition-all overflow-hidden max-w-full
         ${answer 
           ? 'bg-[#28a89b] text-white border-[#fde047] cursor-pointer hover:opacity-90 shadow-md' 
           : isActive 
@@ -374,7 +399,7 @@ function BlankSlot({ answer, isActive, onClick, isSubmitted }: { answer?: string
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.5, y: -10 }}
             transition={{ type: "spring", stiffness: 700, damping: 35 }}
-            className="font-bold whitespace-nowrap"
+            className="font-bold whitespace-normal break-words text-center"
           >
             {answer}
           </motion.span>
@@ -384,7 +409,7 @@ function BlankSlot({ answer, isActive, onClick, isSubmitted }: { answer?: string
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-sm font-bold whitespace-nowrap"
+            className="text-sm font-bold whitespace-normal break-words text-center"
           >
             {isActive ? '請選擇卡牌' : '等待填空'}
           </motion.span>
