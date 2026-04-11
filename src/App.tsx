@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home } from './components/Home';
 import { Game } from './components/Game';
 import { Studio } from './components/Studio';
+import { Onboarding } from './components/Onboarding';
 import { useDeck } from './hooks/useDeck';
 
 type ViewState = 'home' | 'game' | 'studio';
 
 export default function App() {
-  const [view, setView] = useState<ViewState>('home');
+  const [view, setView] = useState<ViewState>(() => {
+    const saved = sessionStorage.getItem('app_view_state');
+    return (saved as ViewState) || 'home';
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem('app_view_state', view);
+  }, [view]);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('fill_in_party_onboarding_done');
+    if (!hasSeenOnboarding) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const handleCompleteOnboarding = () => {
+    localStorage.setItem('fill_in_party_onboarding_done', 'true');
+    setShowOnboarding(false);
+  };
+
   const { 
     deck, 
     decks,
@@ -30,6 +52,7 @@ export default function App() {
 
   return (
     <>
+      {showOnboarding && <Onboarding onComplete={handleCompleteOnboarding} />}
       {view === 'home' && (
         <Home 
           deck={deck} 
@@ -42,6 +65,7 @@ export default function App() {
           clearDeck={clearDeck}
           renameDeck={renameDeck}
           switchDeck={switchDeck}
+          onOpenTutorial={() => setShowOnboarding(true)}
         />
       )}
       {view === 'game' && (

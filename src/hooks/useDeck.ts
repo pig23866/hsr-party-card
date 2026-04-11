@@ -13,8 +13,16 @@ export interface DeckMetadata {
 }
 
 export function useDeck() {
-  const [decks, setDecks] = useState<DeckMetadata[]>([]);
-  const [activeDeckId, setActiveDeckId] = useState<string>('default');
+  const [decks, setDecks] = useState<DeckMetadata[]>(() => {
+    const storedDecks = JSON.parse(localStorage.getItem('deck_list') || '[]');
+    if (storedDecks.length === 0) {
+      return [{ id: 'default', name: '預設資料庫', createdAt: Date.now() }];
+    }
+    return storedDecks;
+  });
+  const [activeDeckId, setActiveDeckId] = useState<string>(() => {
+    return localStorage.getItem('current_deck_id') || 'default';
+  });
   const [deck, setDeck] = useState<Deck>({ answers: [], questions: [] });
   const [storageUsage, setStorageUsage] = useState({ usage: 0, limit: 5 * 1024 * 1024, ratio: 0 });
 
@@ -104,7 +112,6 @@ export function useDeck() {
         { id: 'default', name: '預設資料庫', createdAt: Date.now() }
       ];
       localStorage.setItem('deck_list', JSON.stringify(initialDecks));
-      setDecks(initialDecks);
       
       // Migrate old data to default if it exists
       const oldAnswers = localStorage.getItem('custom_answers');
@@ -120,12 +127,7 @@ export function useDeck() {
         localStorage.removeItem('custom_questions');
         localStorage.removeItem('deleted_questions');
       }
-    } else {
-      setDecks(storedDecks);
     }
-
-    const currentId = localStorage.getItem('current_deck_id') || 'default';
-    setActiveDeckId(currentId);
   }, []);
 
   useEffect(() => {
@@ -394,7 +396,7 @@ export function useDeck() {
     return true;
   };
 
-  const bulkImport = (data: any) => {
+  const bulkImport = async (data: any, onProgress?: (progress: number, message: string) => void) => {
     let addedAnswers = 0;
     let addedQuestions = 0;
     const duplicateAnswers: string[] = [];
@@ -413,23 +415,35 @@ export function useDeck() {
     const currentAnswersLower = new Set(deck.answers.map(a => a.toLowerCase()));
     const currentQuestionsLower = new Set(deck.questions.map(q => `${q.segmentA.toLowerCase()}|${q.segmentB.toLowerCase()}|${q.segmentC.toLowerCase()}`));
 
+    const totalItems = (data.answers?.length || 0) + (data.questions?.length || 0);
+    let processedItems = 0;
+    const chunkSize = 500;
+
     if (data.answers && Array.isArray(data.answers)) {
       const answersToRemoveFromDeleted = new Set<string>();
-      data.answers.forEach((ans: string) => {
-        if (typeof ans !== 'string') return;
-        const trimmed = ans.trim();
-        if (!trimmed) return;
-        
-        const lower = trimmed.toLowerCase();
-        if (currentAnswersLower.has(lower)) {
-          duplicateAnswers.push(trimmed);
-        } else {
-          newCustomAnswers.push(trimmed);
-          currentAnswersLower.add(lower);
-          answersToRemoveFromDeleted.add(lower);
-          addedAnswers++;
+      for (let i = 0; i < data.answers.length; i += chunkSize) {
+        const chunk = data.answers.slice(i, i + chunkSize);
+        chunk.forEach((ans: string) => {
+          if (typeof ans !== 'string') return;
+          const trimmed = ans.trim();
+          if (!trimmed) return;
+          
+          const lower = trimmed.toLowerCase();
+          if (currentAnswersLower.has(lower)) {
+            duplicateAnswers.push(trimmed);
+          } else {
+            newCustomAnswers.push(trimmed);
+            currentAnswersLower.add(lower);
+            answersToRemoveFromDeleted.add(lower);
+            addedAnswers++;
+          }
+        });
+        processedItems += chunk.length;
+        if (onProgress) {
+          onProgress(Math.round((processedItems / totalItems) * 50) + 50, `正在匯入答案卡... (${processedItems}/${totalItems})`);
+          await new Promise(resolve => setTimeout(resolve, 10)); // Yield to UI
         }
-      });
+      }
       if (answersToRemoveFromDeleted.size > 0) {
         newDeletedAnswers = newDeletedAnswers.filter(a => !answersToRemoveFromDeleted.has(a.toLowerCase()));
       }
@@ -437,23 +451,31 @@ export function useDeck() {
 
     if (data.questions && Array.isArray(data.questions)) {
       const questionsToRemoveFromDeleted = new Set<string>();
-      data.questions.forEach((q: any) => {
-        if (!q || typeof q !== 'object') return;
-        const segA = (q.segmentA || '').toString().trim();
-        const segB = (q.segmentB || '').toString().trim();
-        const segC = (q.segmentC || '').toString().trim();
-        if (!segA && !segB) return;
+      for (let i = 0; i < data.questions.length; i += chunkSize) {
+        const chunk = data.questions.slice(i, i + chunkSize);
+        chunk.forEach((q: any) => {
+          if (!q || typeof q !== 'object') return;
+          const segA = (q.segmentA || '').toString().trim();
+          const segB = (q.segmentB || '').toString().trim();
+          const segC = (q.segmentC || '').toString().trim();
+          if (!segA && !segB) return;
 
-        const key = `${segA.toLowerCase()}|${segB.toLowerCase()}|${segC.toLowerCase()}`;
-        if (currentQuestionsLower.has(key)) {
-          duplicateQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
-        } else {
-          newCustomQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
-          currentQuestionsLower.add(key);
-          questionsToRemoveFromDeleted.add(key);
-          addedQuestions++;
+          const key = `${segA.toLowerCase()}|${segB.toLowerCase()}|${segC.toLowerCase()}`;
+          if (currentQuestionsLower.has(key)) {
+            duplicateQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
+          } else {
+            newCustomQuestions.push({ segmentA: segA, segmentB: segB, segmentC: segC });
+            currentQuestionsLower.add(key);
+            questionsToRemoveFromDeleted.add(key);
+            addedQuestions++;
+          }
+        });
+        processedItems += chunk.length;
+        if (onProgress) {
+          onProgress(Math.round((processedItems / totalItems) * 50) + 50, `正在匯入題目卡... (${processedItems}/${totalItems})`);
+          await new Promise(resolve => setTimeout(resolve, 10)); // Yield to UI
         }
-      });
+      }
       if (questionsToRemoveFromDeleted.size > 0) {
         newDeletedQuestions = newDeletedQuestions.filter(dq => 
           !questionsToRemoveFromDeleted.has(`${dq.segmentA.toLowerCase()}|${dq.segmentB.toLowerCase()}|${dq.segmentC.toLowerCase()}`)

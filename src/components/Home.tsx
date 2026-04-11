@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Sparkles, Database, Plus, Trash2, Edit2, Check, X, AlertCircle } from 'lucide-react';
+import { Play, Sparkles, Database, Plus, Trash2, Edit2, Check, X, AlertCircle, HelpCircle } from 'lucide-react';
 import { Deck, DeckMetadata } from '../hooks/useDeck';
 
 interface HomeProps {
@@ -14,6 +14,7 @@ interface HomeProps {
   clearDeck: (id: string) => boolean;
   renameDeck: (id: string, name: string) => boolean;
   switchDeck: (id: string) => void;
+  onOpenTutorial: () => void;
 }
 
 export function Home({ 
@@ -26,7 +27,8 @@ export function Home({
   deleteDeck,
   clearDeck,
   renameDeck,
-  switchDeck
+  switchDeck,
+  onOpenTutorial
 }: HomeProps) {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState<string | null>(null);
@@ -64,7 +66,15 @@ export function Home({
   };
 
   return (
-    <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col items-center justify-center p-6 font-sans">
+    <div className="min-h-screen bg-[#9dbfbf] text-gray-800 flex flex-col items-center justify-center p-6 font-sans relative">
+      <button
+        onClick={onOpenTutorial}
+        className="absolute top-6 right-6 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-sm transition-all shadow-sm hover:shadow-md"
+        title="新手教學"
+      >
+        <HelpCircle className="w-6 h-6" />
+      </button>
+
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

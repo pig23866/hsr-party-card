@@ -4,6 +4,7 @@ import { Deck, DeckMetadata } from '../hooks/useDeck';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, RefreshCw, CheckCircle2, ChevronRight, History, X, Download } from 'lucide-react';
 import { toJpeg } from 'html-to-image';
+import { parseColoredText } from '../utils/textParser';
 
 interface GameProps {
   deck: Deck;
@@ -19,10 +20,29 @@ interface HistoryRecord {
 }
 
 export function Game({ deck, activeDeck, onBack }: GameProps) {
-  const [question, setQuestion] = useState<Question | null>(null);
-  const [hand, setHand] = useState<string[]>([]);
-  const [selectedAnswers, setSelectedAnswers] = useState<(string | null)[]>([]);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [question, setQuestion] = useState<Question | null>(() => {
+    const saved = sessionStorage.getItem(`game_state_question_${activeDeck.id}`);
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [hand, setHand] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem(`game_state_hand_${activeDeck.id}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedAnswers, setSelectedAnswers] = useState<(string | null)[]>(() => {
+    const saved = sessionStorage.getItem(`game_state_selected_${activeDeck.id}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [isSubmitted, setIsSubmitted] = useState<boolean>(() => {
+    const saved = sessionStorage.getItem(`game_state_submitted_${activeDeck.id}`);
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    if (question) sessionStorage.setItem(`game_state_question_${activeDeck.id}`, JSON.stringify(question));
+    sessionStorage.setItem(`game_state_hand_${activeDeck.id}`, JSON.stringify(hand));
+    sessionStorage.setItem(`game_state_selected_${activeDeck.id}`, JSON.stringify(selectedAnswers));
+    sessionStorage.setItem(`game_state_submitted_${activeDeck.id}`, JSON.stringify(isSubmitted));
+  }, [question, hand, selectedAnswers, isSubmitted, activeDeck.id]);
 
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
     try {
@@ -42,9 +62,11 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
   // Initialize game
   useEffect(() => {
     if (deck.questions.length > 0 && deck.answers.length > 0) {
-      startNewRound();
+      if (!question) {
+        startNewRound();
+      }
     }
-  }, [deck]);
+  }, [deck, question]);
 
   const startNewRound = () => {
     if (deck.questions.length === 0 || deck.answers.length === 0) return;
@@ -318,11 +340,11 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
                     <div id={`history-record-${record.id}`} className="p-2 bg-white rounded-lg">
                       <div className="text-lg font-bold leading-relaxed text-gray-800">
                         {record.question.segmentA && <span>{record.question.segmentA}</span>}
-                        <span className="mx-2 text-[#28a89b] underline decoration-2 underline-offset-4">{record.answers[0]}</span>
+                        <span className="mx-2 underline decoration-2 underline-offset-4" style={{ color: parseColoredText(record.answers[0]).color || '#28a89b' }}>{parseColoredText(record.answers[0]).text}</span>
                         {record.question.segmentB && <span>{record.question.segmentB}</span>}
                         {record.answers.length > 1 && (
                           <>
-                            <span className="mx-2 text-[#28a89b] underline decoration-2 underline-offset-4">{record.answers[1]}</span>
+                            <span className="mx-2 underline decoration-2 underline-offset-4" style={{ color: parseColoredText(record.answers[1]).color || '#28a89b' }}>{parseColoredText(record.answers[1]).text}</span>
                             {record.question.segmentC && <span>{record.question.segmentC}</span>}
                           </>
                         )}
@@ -350,6 +372,7 @@ export function Game({ deck, activeDeck, onBack }: GameProps) {
 }
 
 function AnswerCard({ answer, index, isSubmitted, blanksCount, selectedAnswersLength, onClick }: { answer: string, index: number, isSubmitted: boolean, blanksCount: number, selectedAnswersLength: number, onClick: () => void, key?: any }) {
+  const { color, text } = parseColoredText(answer);
   return (
     <div>
       <motion.button
@@ -369,13 +392,14 @@ function AnswerCard({ answer, index, isSubmitted, blanksCount, selectedAnswersLe
         disabled={isSubmitted || selectedAnswersLength >= blanksCount}
         className={`bg-[#28a89b] border-[3px] border-[#fde047] text-white px-5 py-3 rounded-3xl font-bold text-base md:text-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-normal break-words text-center max-w-full`}
       >
-        {answer}
+        <span style={{ color: color || 'inherit' }}>{text}</span>
       </motion.button>
     </div>
   );
 }
 
 function BlankSlot({ answer, isActive, onClick, isSubmitted, index }: { answer?: string | null, isActive: boolean, onClick: () => void, isSubmitted: boolean, index: number }) {
+  const parsedAnswer = answer ? parseColoredText(answer) : null;
   return (
     <motion.div 
       layout
@@ -392,7 +416,7 @@ function BlankSlot({ answer, isActive, onClick, isSubmitted, index }: { answer?:
       `}
     >
       <AnimatePresence mode="popLayout">
-        {answer ? (
+        {parsedAnswer ? (
           <motion.span 
             key="answer"
             initial={{ opacity: 0, scale: 0.5, y: 10 }}
@@ -400,8 +424,9 @@ function BlankSlot({ answer, isActive, onClick, isSubmitted, index }: { answer?:
             exit={{ opacity: 0, scale: 0.5, y: -10 }}
             transition={{ type: "spring", stiffness: 700, damping: 35 }}
             className="font-bold whitespace-normal break-words text-center"
+            style={{ color: parsedAnswer.color || 'inherit' }}
           >
-            {answer}
+            {parsedAnswer.text}
           </motion.span>
         ) : (
           <motion.span 
